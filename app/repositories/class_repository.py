@@ -11,20 +11,22 @@ class ClassRepository(BaseRepository):
     def create(
         self,
         class_name: str,
+        school_id: int,
         capacity: Optional[int],
     ) -> dict:
         """Create a new class record."""
         created_date = get_current_datetime()
         self.cursor.execute(
             """INSERT INTO classes 
-               (class_name, capacity, created_date, is_deleted) 
-               VALUES (?, ?, ?, 0)""",
-            (class_name, capacity, created_date),
+               (class_name, school_id, capacity, created_date, is_deleted) 
+               VALUES (?, ?, ?, ?, 0)""",
+            (class_name, school_id, capacity, created_date),
         )
         self.commit()
         return {
             "class_id": self.cursor.lastrowid,
             "class_name": class_name,
+            "school_id": school_id,
             "capacity": capacity,
             "created_date": created_date,
         }
@@ -49,15 +51,15 @@ class ClassRepository(BaseRepository):
         if not existing:
             return None
 
-        for key in ("class_name", "capacity"):
+        for key in ("class_name", "school_id", "capacity"):
             if key in kwargs and kwargs[key] is not None:
                 existing[key] = kwargs[key]
 
         self.cursor.execute(
             """UPDATE classes 
-               SET class_name=?, capacity=? 
+               SET class_name=?, school_id=?, capacity=? 
                WHERE class_id=? AND is_deleted = 0""",
-            (existing["class_name"], existing["capacity"], class_id),
+            (existing["class_name"], existing["school_id"], existing["capacity"], class_id),
         )
         self.commit()
         return existing
@@ -75,44 +77,47 @@ class ClassRepository(BaseRepository):
         self.commit()
         return True
 
+    def count_active_students(self, class_id: int) -> int:
+        """Count active students in a class."""
+        self.cursor.execute(
+            "SELECT COUNT(*) as count FROM students WHERE class_id = ? AND is_deleted = 0",
+            (class_id,),
+        )
+        return self.cursor.fetchone()["count"]
+
     def exists(self, class_id: int) -> bool:
         """Check if a class exists (not soft-deleted)."""
         return self.get_by_id(class_id) is not None
 
-    # --- Teacher links ---
-
-    def link_teacher(self, class_id: int, teacher_id: int):
-        """Link a teacher to a class."""
+    def count_active_teachers(self, class_id: int) -> int:
+        """Count active teachers assigned to a class."""
         self.cursor.execute(
-            "INSERT OR IGNORE INTO class_teachers (class_id, teacher_id) VALUES (?, ?)",
-            (class_id, teacher_id),
-        )
-        self.commit()
-
-    def unlink_all_teachers(self, class_id: int):
-        """Remove all teacher links for a class."""
-        self.cursor.execute(
-            "DELETE FROM class_teachers WHERE class_id = ?",
+            "SELECT COUNT(*) as count FROM teachers WHERE class_id = ? AND is_deleted = 0",
             (class_id,),
         )
-        self.commit()
+        return self.cursor.fetchone()["count"]
 
-    def get_teacher_ids(self, class_id: int) -> list[int]:
-        """Get all teacher IDs for a class (excluding soft-deleted teachers)."""
+    def get_current_student_count(self, class_id: int) -> int:
+        """Get the current number of students in a class."""
         self.cursor.execute(
-            """SELECT ct.teacher_id FROM class_teachers ct
-               JOIN teachers t ON ct.teacher_id = t.teacher_id
-               WHERE ct.class_id = ? AND t.is_deleted = 0""",
+            "SELECT COUNT(*) as count FROM students WHERE class_id = ? AND is_deleted = 0",
             (class_id,),
         )
-        return [row["teacher_id"] for row in self.cursor.fetchall()]
+        return self.cursor.fetchone()["count"]
 
-    def get_teachers(self, class_id: int) -> list[dict]:
-        """Get all teachers for a class (excluding soft-deleted)."""
-        self.cursor.execute(
-            """SELECT t.* FROM teachers t
-               JOIN class_teachers ct ON t.teacher_id = ct.teacher_id
-               WHERE ct.class_id = ? AND t.is_deleted = 0""",
-            (class_id,),
-        )
-        return [dict(row) for row in self.cursor.fetchall()]
+    def check_capacity_available(self, class_id: int, additional_students: int = 1) -> tuple[bool, Optional[str]]:
+        """Check if class has capacity for additional students."""
+        class_data = self.get_by_id(class_id)
+        if not class_data:
+            return False, "Class not found"
+        
+        capacity = class_data.get("capacity")
+        if capacity is None:
+            # No capacity limit set, allow unlimited students
+            return True, None
+        
+        current_count = self.get_current_student_count(class_id)
+        if current_count + additional_students > capacity:
+            return False, f"Class capacity exceeded. Current: {current_count}, Capacity: {capacity}, Trying to add: {additional_students}"
+        
+        return True, None

@@ -25,7 +25,10 @@ def create_parent(
     service: ParentService = Depends(get_service),
 ):
     """Create a new parent."""
-    return service.create(parent)
+    result, error = service.create(parent)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    return result
 
 
 @router.get("/", response_model=list[ParentResponse])
@@ -50,15 +53,21 @@ def update_parent(
     service: ParentService = Depends(get_service),
 ):
     """Update a parent."""
-    result = service.update(parent_id, parent)
-    if not result:
-        raise HTTPException(status_code=404, detail="Parent not found")
+    result, error = service.update(parent_id, parent)
+    if error:
+        if "not found" in error.lower():
+            raise HTTPException(status_code=404, detail=error)
+        else:
+            raise HTTPException(status_code=400, detail=error)
     return result
 
 
 @router.delete("/{parent_id}", status_code=204)
 def delete_parent(parent_id: int, service: ParentService = Depends(get_service)):
     """Soft delete a parent."""
-    if not service.delete(parent_id):
-        raise HTTPException(status_code=404, detail="Parent not found")
+    success, error = service.delete(parent_id)
+    if not success:
+        if "not found" in error.lower():
+            raise HTTPException(status_code=404, detail=error)
+        raise HTTPException(status_code=409, detail=error)
     return None

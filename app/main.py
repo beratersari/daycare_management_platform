@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.database.connection import init_db
-from app.routers import parents, teachers, classes, students
+from app.routers import parents, teachers, classes, students, schools
 
 
 @asynccontextmanager
@@ -21,6 +21,7 @@ app = FastAPI(
 )
 
 # Include routers (all use /api/v1 prefix)
+app.include_router(schools.router)
 app.include_router(parents.router)
 app.include_router(teachers.router)
 app.include_router(classes.router)

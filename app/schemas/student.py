@@ -66,6 +66,7 @@ class HWInfoResponse(BaseModel):
 class StudentCreate(BaseModel):
     first_name: str = Field(..., examples=["Charlie"])
     last_name: str = Field(..., examples=["Smith"])
+    school_id: int = Field(..., examples=[1], description="ID of the school this student belongs to")
     class_id: Optional[int] = Field(None, examples=[1])
     student_photo: Optional[str] = Field(None, examples=["https://photos.example.com/charlie.jpg"])
     date_of_birth: Optional[str] = Field(None, examples=["2021-03-15"], description="Date in YYYY-MM-DD format")
@@ -82,6 +83,7 @@ class StudentCreate(BaseModel):
 class StudentUpdate(BaseModel):
     first_name: Optional[str] = Field(None, examples=["Charlie"])
     last_name: Optional[str] = Field(None, examples=["Smith"])
+    school_id: Optional[int] = Field(None, examples=[1], description="ID of the school this student belongs to")
     class_id: Optional[int] = Field(None, examples=[1])
     student_photo: Optional[str] = Field(None, examples=["https://photos.example.com/charlie.jpg"])
     date_of_birth: Optional[str] = Field(None, examples=["2021-03-15"], description="Date in YYYY-MM-DD format")
@@ -99,6 +101,7 @@ class StudentResponse(BaseModel):
     student_id: int
     first_name: str
     last_name: str
+    school_id: int
     class_id: Optional[int] = None
     student_photo: Optional[str] = None
     date_of_birth: Optional[str] = None

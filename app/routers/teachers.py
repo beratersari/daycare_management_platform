@@ -21,7 +21,10 @@ def create_teacher(
     service: TeacherService = Depends(get_service),
 ):
     """Create a new teacher."""
-    return service.create(teacher)
+    result, error = service.create(teacher)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    return result
 
 
 @router.get("/", response_model=list[TeacherResponse])
@@ -46,17 +49,23 @@ def update_teacher(
     service: TeacherService = Depends(get_service),
 ):
     """Update a teacher."""
-    result = service.update(teacher_id, teacher)
-    if not result:
-        raise HTTPException(status_code=404, detail="Teacher not found")
+    result, error = service.update(teacher_id, teacher)
+    if error:
+        if "not found" in error.lower():
+            raise HTTPException(status_code=404, detail=error)
+        else:
+            raise HTTPException(status_code=400, detail=error)
     return result
 
 
 @router.delete("/{teacher_id}", status_code=204)
 def delete_teacher(teacher_id: int, service: TeacherService = Depends(get_service)):
     """Soft delete a teacher."""
-    if not service.delete(teacher_id):
-        raise HTTPException(status_code=404, detail="Teacher not found")
+    success, error = service.delete(teacher_id)
+    if not success:
+        if "not found" in error.lower():
+            raise HTTPException(status_code=404, detail=error)
+        raise HTTPException(status_code=409, detail=error)
     return None
 
 
@@ -66,9 +75,8 @@ def get_teacher_classes(
     service: TeacherService = Depends(get_service),
 ):
     """
-    Get all classes assigned to a teacher, including full student details
-    (allergies, HW info, parents). This allows a teacher to see all information
-    about students in their class(es).
+    Get the class assigned to a teacher, including full student and teacher details.
+    Returns a list with one class if assigned, or an empty list if not assigned.
     """
     result = service.get_classes(teacher_id)
     if result is None:

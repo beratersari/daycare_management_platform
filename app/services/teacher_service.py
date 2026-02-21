@@ -5,6 +5,7 @@ from typing import Optional
 from app.repositories.teacher_repository import TeacherRepository
 from app.repositories.class_repository import ClassRepository
 from app.repositories.student_repository import StudentRepository
+from app.repositories.school_repository import SchoolRepository
 from app.schemas.teacher import TeacherCreate, TeacherResponse, TeacherUpdate
 from app.schemas.class_dto import ClassResponse
 from app.schemas.student import AllergyResponse, HWInfoResponse, StudentResponse
@@ -18,17 +19,28 @@ class TeacherService:
         self.repo = TeacherRepository(db)
         self.class_repo = ClassRepository(db)
         self.student_repo = StudentRepository(db)
+        self.school_repo = SchoolRepository(db)
 
-    def create(self, data: TeacherCreate) -> TeacherResponse:
+    def create(self, data: TeacherCreate) -> tuple[Optional[TeacherResponse], Optional[str]]:
         """Create a new teacher."""
+        # Validate school exists
+        if not self.school_repo.exists(data.school_id):
+            return None, "School not found"
+
+        # Validate class_id if provided
+        if data.class_id is not None and not self.class_repo.exists(data.class_id):
+            return None, "Class not found"
+
         result = self.repo.create(
             first_name=data.first_name,
             last_name=data.last_name,
+            school_id=data.school_id,
+            class_id=data.class_id,
             email=data.email,
             phone=data.phone,
             address=data.address,
         )
-        return TeacherResponse(**result)
+        return TeacherResponse(**result), None
 
     def get_all(self) -> list[TeacherResponse]:
         """Get all teachers."""
@@ -42,31 +54,50 @@ class TeacherService:
             return None
         return TeacherResponse(**teacher)
 
-    def update(self, teacher_id: int, data: TeacherUpdate) -> Optional[TeacherResponse]:
+    def update(self, teacher_id: int, data: TeacherUpdate) -> tuple[Optional[TeacherResponse], Optional[str]]:
         """Update a teacher."""
         update_data = data.model_dump(exclude_unset=True)
+
+        # Validate school if being updated
+        if "school_id" in update_data and update_data["school_id"] is not None:
+            if not self.school_repo.exists(update_data["school_id"]):
+                return None, "School not found"
+
+        # Validate class_id if being updated
+        if "class_id" in update_data and update_data["class_id"] is not None:
+            if not self.class_repo.exists(update_data["class_id"]):
+                return None, "Class not found"
+
         result = self.repo.update(teacher_id, **update_data)
         if not result:
-            return None
-        return TeacherResponse(**result)
+            return None, "Teacher not found"
+        return TeacherResponse(**result), None
 
-    def delete(self, teacher_id: int) -> bool:
-        """Soft delete a teacher."""
-        return self.repo.soft_delete(teacher_id)
+    def delete(self, teacher_id: int) -> tuple[bool, Optional[str]]:
+        """Soft delete a teacher if not assigned to a class."""
+        if not self.repo.exists(teacher_id):
+            return False, "Teacher not found"
+
+        # Business rule: a teacher cannot be deleted while assigned to a class
+        if self.repo.is_assigned_to_class(teacher_id):
+            return False, "Cannot delete teacher. Still assigned to a class."
+
+        self.repo.soft_delete(teacher_id)
+        return True, None
 
     def exists(self, teacher_id: int) -> bool:
         """Check if teacher exists."""
         return self.repo.exists(teacher_id)
 
     def get_classes(self, teacher_id: int) -> Optional[list[ClassResponse]]:
-        """Get all classes for a teacher with full student details."""
-        if not self.repo.exists(teacher_id):
+        """Get the class for a teacher with full student details."""
+        teacher = self.repo.get_by_id(teacher_id)
+        if not teacher:
             return None
 
-        class_ids = self.repo.get_class_ids(teacher_id)
         classes = []
-
-        for class_id in class_ids:
+        class_id = teacher.get("class_id")
+        if class_id is not None:
             cls = self.class_repo.get_by_id(class_id)
             if cls:
                 classes.append(self._build_class_response(cls))
@@ -82,7 +113,7 @@ class TeacherService:
         student_responses = [self._build_student_response(s) for s in students]
 
         # Get teachers
-        teachers = self.class_repo.get_teachers(class_id)
+        teachers = self.repo.get_by_class_id(class_id)
         teacher_responses = [TeacherResponse(**t) for t in teachers]
 
         return ClassResponse(

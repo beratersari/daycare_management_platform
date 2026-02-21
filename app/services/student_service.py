@@ -5,6 +5,7 @@ from typing import Optional
 from app.repositories.student_repository import StudentRepository
 from app.repositories.parent_repository import ParentRepository
 from app.repositories.class_repository import ClassRepository
+from app.repositories.school_repository import SchoolRepository
 from app.schemas.student import (
     AllergyCreate,
     AllergyResponse,
@@ -24,12 +25,28 @@ class StudentService:
         self.repo = StudentRepository(db)
         self.parent_repo = ParentRepository(db)
         self.class_repo = ClassRepository(db)
+        self.school_repo = SchoolRepository(db)
 
     def create(self, data: StudentCreate) -> tuple[Optional[StudentResponse], Optional[str]]:
         """Create a new student with parents, allergies, and HW info."""
+        # Validate school exists
+        if not self.school_repo.exists(data.school_id):
+            return None, "School not found"
+            
+        # Check school capacity
+        can_add_to_school, school_error = self.school_repo.check_capacity_available(data.school_id, 1)
+        if not can_add_to_school:
+            return None, school_error
+            
         # Validate class_id
         if data.class_id is not None and not self.class_repo.exists(data.class_id):
             return None, "Class not found"
+            
+        # Check class capacity if class is specified
+        if data.class_id is not None:
+            can_add_to_class, class_error = self.class_repo.check_capacity_available(data.class_id, 1)
+            if not can_add_to_class:
+                return None, class_error
 
         # Validate parent_ids
         for pid in data.parent_ids:
@@ -40,6 +57,7 @@ class StudentService:
         student = self.repo.create(
             first_name=data.first_name,
             last_name=data.last_name,
+            school_id=data.school_id,
             class_id=data.class_id,
             student_photo=data.student_photo,
             date_of_birth=data.date_of_birth,
@@ -92,10 +110,27 @@ class StudentService:
 
         update_data = data.model_dump(exclude_unset=True)
 
+        # Validate school if being updated
+        if "school_id" in update_data and update_data["school_id"] is not None:
+            if not self.school_repo.exists(update_data["school_id"]):
+                return None, "School not found"
+            
+            # Check if changing schools - if so, validate new school capacity
+            if update_data["school_id"] != existing["school_id"]:
+                can_add_to_school, school_error = self.school_repo.check_capacity_available(update_data["school_id"], 1)
+                if not can_add_to_school:
+                    return None, school_error
+
         # Validate class_id if being updated
         if "class_id" in update_data and update_data["class_id"] is not None:
             if not self.class_repo.exists(update_data["class_id"]):
                 return None, "Class not found"
+            
+            # Check if changing classes - if so, validate new class capacity
+            if update_data["class_id"] != existing.get("class_id"):
+                can_add_to_class, class_error = self.class_repo.check_capacity_available(update_data["class_id"], 1)
+                if not can_add_to_class:
+                    return None, class_error
 
         # Update basic fields
         result = self.repo.update(student_id, **update_data)
@@ -133,9 +168,13 @@ class StudentService:
 
         return self._build_response(result), None
 
-    def delete(self, student_id: int) -> bool:
+    def delete(self, student_id: int) -> tuple[bool, Optional[str]]:
         """Soft delete a student."""
-        return self.repo.soft_delete(student_id)
+        if not self.repo.exists(student_id):
+            return False, "Student not found"
+
+        self.repo.soft_delete(student_id)
+        return True, None
 
     def exists(self, student_id: int) -> bool:
         """Check if student exists."""

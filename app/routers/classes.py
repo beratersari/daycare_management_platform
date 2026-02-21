@@ -19,10 +19,13 @@ def create_class(
     cls: ClassCreate,
     service: ClassService = Depends(get_service),
 ):
-    """Create a new class with teachers."""
+    """Create a new class."""
     result, error = service.create(cls)
     if error:
-        raise HTTPException(status_code=404, detail=error)
+        if "not found" in error.lower():
+            raise HTTPException(status_code=404, detail=error)
+        else:
+            raise HTTPException(status_code=400, detail=error)
     return result
 
 
@@ -50,13 +53,28 @@ def update_class(
     """Update a class."""
     result, error = service.update(class_id, cls)
     if error:
-        raise HTTPException(status_code=404, detail=error)
+        if "not found" in error.lower():
+            raise HTTPException(status_code=404, detail=error)
+        else:
+            raise HTTPException(status_code=400, detail=error)
     return result
 
 
 @router.delete("/{class_id}", status_code=204)
 def delete_class(class_id: int, service: ClassService = Depends(get_service)):
     """Soft delete a class."""
-    if not service.delete(class_id):
-        raise HTTPException(status_code=404, detail="Class not found")
+    success, error = service.delete(class_id)
+    if not success:
+        if "not found" in error.lower():
+            raise HTTPException(status_code=404, detail=error)
+        raise HTTPException(status_code=409, detail=error)
     return None
+
+
+@router.get("/{class_id}/capacity")
+def get_class_capacity_info(class_id: int, service: ClassService = Depends(get_service)):
+    """Get class capacity information."""
+    result = service.get_capacity_info(class_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Class not found")
+    return result

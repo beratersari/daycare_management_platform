@@ -7,13 +7,14 @@ EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 PHONE_REGEX = re.compile(r"^\+?[0-9\s\-\(\)]{7,20}$")
 
 
-class ParentCreate(BaseModel):
-    first_name: str = Field(..., examples=["Alice"])
-    last_name: str = Field(..., examples=["Smith"])
-    school_id: int = Field(..., examples=[1], description="ID of the school this parent belongs to")
-    email: Optional[str] = Field(None, examples=["alice@example.com"])
+class SchoolCreate(BaseModel):
+    school_name: str = Field(..., examples=["Sunshine Daycare Center"])
+    address: str = Field(..., examples=["123 Daycare Lane, City, State 12345"])
     phone: Optional[str] = Field(None, examples=["555-123-4567"])
-    address: Optional[str] = Field(None, examples=["123 Main St, City"])
+    email: Optional[str] = Field(None, examples=["info@sunshinedaycare.com"])
+    director_name: Optional[str] = Field(None, examples=["Dr. Sarah Johnson"])
+    license_number: Optional[str] = Field(None, examples=["DC-2024-001"])
+    capacity: Optional[int] = Field(None, examples=[100], description="Total capacity of the school")
 
     @field_validator("email")
     @classmethod
@@ -30,13 +31,14 @@ class ParentCreate(BaseModel):
         return v
 
 
-class ParentUpdate(BaseModel):
-    first_name: Optional[str] = Field(None, examples=["Alice"])
-    last_name: Optional[str] = Field(None, examples=["Smith"])
-    school_id: Optional[int] = Field(None, examples=[1], description="ID of the school this parent belongs to")
-    email: Optional[str] = Field(None, examples=["alice@example.com"])
+class SchoolUpdate(BaseModel):
+    school_name: Optional[str] = Field(None, examples=["Sunshine Daycare Center"])
+    address: Optional[str] = Field(None, examples=["123 Daycare Lane, City, State 12345"])
     phone: Optional[str] = Field(None, examples=["555-123-4567"])
-    address: Optional[str] = Field(None, examples=["123 Main St, City"])
+    email: Optional[str] = Field(None, examples=["info@sunshinedaycare.com"])
+    director_name: Optional[str] = Field(None, examples=["Dr. Sarah Johnson"])
+    license_number: Optional[str] = Field(None, examples=["DC-2024-001"])
+    capacity: Optional[int] = Field(None, examples=[100], description="Total capacity of the school")
 
     @field_validator("email")
     @classmethod
@@ -53,16 +55,20 @@ class ParentUpdate(BaseModel):
         return v
 
 
-class ParentResponse(BaseModel):
-    parent_id: int
-    first_name: str
-    last_name: str
+class SchoolResponse(BaseModel):
     school_id: int
-    email: Optional[str] = None
+    school_name: str
+    address: str
     phone: Optional[str] = None
-    address: Optional[str] = None
+    email: Optional[str] = None
+    director_name: Optional[str] = None
+    license_number: Optional[str] = None
+    capacity: Optional[int] = None
     created_date: str
 
 
-class ParentWithStudents(ParentResponse):
-    student_ids: list[int] = []
+class SchoolWithStats(SchoolResponse):
+    total_students: int = 0
+    total_teachers: int = 0
+    total_classes: int = 0
+    total_parents: int = 0

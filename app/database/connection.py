@@ -28,53 +28,68 @@ def init_db():
     cursor = conn.cursor()
 
     cursor.executescript("""
+        CREATE TABLE IF NOT EXISTS schools (
+            school_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_name TEXT NOT NULL,
+            address TEXT NOT NULL,
+            phone TEXT,
+            email TEXT,
+            director_name TEXT,
+            license_number TEXT,
+            capacity INTEGER,
+            created_date TEXT NOT NULL,
+            is_deleted INTEGER NOT NULL DEFAULT 0
+        );
+
         CREATE TABLE IF NOT EXISTS parents (
             parent_id INTEGER PRIMARY KEY AUTOINCREMENT,
             first_name TEXT NOT NULL,
             last_name TEXT NOT NULL,
+            school_id INTEGER NOT NULL,
             email TEXT,
             phone TEXT,
             address TEXT,
             created_date TEXT NOT NULL,
-            is_deleted INTEGER NOT NULL DEFAULT 0
+            is_deleted INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (school_id) REFERENCES schools(school_id) ON DELETE RESTRICT
+        );
+
+        CREATE TABLE IF NOT EXISTS classes (
+            class_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            class_name TEXT NOT NULL,
+            school_id INTEGER NOT NULL,
+            capacity INTEGER,
+            created_date TEXT NOT NULL,
+            is_deleted INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (school_id) REFERENCES schools(school_id) ON DELETE RESTRICT
         );
 
         CREATE TABLE IF NOT EXISTS teachers (
             teacher_id INTEGER PRIMARY KEY AUTOINCREMENT,
             first_name TEXT NOT NULL,
             last_name TEXT NOT NULL,
+            school_id INTEGER NOT NULL,
+            class_id INTEGER,
             email TEXT,
             phone TEXT,
             address TEXT,
             created_date TEXT NOT NULL,
-            is_deleted INTEGER NOT NULL DEFAULT 0
-        );
-
-        CREATE TABLE IF NOT EXISTS classes (
-            class_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            class_name TEXT NOT NULL,
-            capacity INTEGER,
-            created_date TEXT NOT NULL,
-            is_deleted INTEGER NOT NULL DEFAULT 0
-        );
-
-        CREATE TABLE IF NOT EXISTS class_teachers (
-            class_id INTEGER NOT NULL,
-            teacher_id INTEGER NOT NULL,
-            PRIMARY KEY (class_id, teacher_id),
-            FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
-            FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id) ON DELETE CASCADE
+            is_deleted INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (school_id) REFERENCES schools(school_id) ON DELETE RESTRICT,
+            FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE SET NULL
         );
 
         CREATE TABLE IF NOT EXISTS students (
             student_id INTEGER PRIMARY KEY AUTOINCREMENT,
             first_name TEXT NOT NULL,
             last_name TEXT NOT NULL,
+            school_id INTEGER NOT NULL,
             class_id INTEGER,
             student_photo TEXT,
             date_of_birth TEXT,
             created_date TEXT NOT NULL,
             is_deleted INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (school_id) REFERENCES schools(school_id) ON DELETE RESTRICT,
             FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE SET NULL
         );
 

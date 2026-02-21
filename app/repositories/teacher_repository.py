@@ -12,6 +12,8 @@ class TeacherRepository(BaseRepository):
         self,
         first_name: str,
         last_name: str,
+        school_id: int,
+        class_id: Optional[int],
         email: Optional[str],
         phone: Optional[str],
         address: Optional[str],
@@ -20,15 +22,17 @@ class TeacherRepository(BaseRepository):
         created_date = get_current_datetime()
         self.cursor.execute(
             """INSERT INTO teachers 
-               (first_name, last_name, email, phone, address, created_date, is_deleted) 
-               VALUES (?, ?, ?, ?, ?, ?, 0)""",
-            (first_name, last_name, email, phone, address, created_date),
+               (first_name, last_name, school_id, class_id, email, phone, address, created_date, is_deleted) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)""",
+            (first_name, last_name, school_id, class_id, email, phone, address, created_date),
         )
         self.commit()
         return {
             "teacher_id": self.cursor.lastrowid,
             "first_name": first_name,
             "last_name": last_name,
+            "school_id": school_id,
+            "class_id": class_id,
             "email": email,
             "phone": phone,
             "address": address,
@@ -55,17 +59,19 @@ class TeacherRepository(BaseRepository):
         if not existing:
             return None
 
-        for key, value in kwargs.items():
-            if key in existing and value is not None:
-                existing[key] = value
+        for key in ("first_name", "last_name", "school_id", "class_id", "email", "phone", "address"):
+            if key in kwargs and kwargs[key] is not None:
+                existing[key] = kwargs[key]
 
         self.cursor.execute(
             """UPDATE teachers 
-               SET first_name=?, last_name=?, email=?, phone=?, address=? 
+               SET first_name=?, last_name=?, school_id=?, class_id=?, email=?, phone=?, address=? 
                WHERE teacher_id=? AND is_deleted = 0""",
             (
                 existing["first_name"],
                 existing["last_name"],
+                existing["school_id"],
+                existing["class_id"],
                 existing["email"],
                 existing["phone"],
                 existing["address"],
@@ -88,15 +94,20 @@ class TeacherRepository(BaseRepository):
         self.commit()
         return True
 
-    def get_class_ids(self, teacher_id: int) -> list[int]:
-        """Get all class IDs for this teacher."""
+    def get_by_class_id(self, class_id: int) -> list[dict]:
+        """Get all teachers in a class (excluding soft-deleted)."""
         self.cursor.execute(
-            """SELECT ct.class_id FROM class_teachers ct
-               JOIN classes c ON ct.class_id = c.class_id
-               WHERE ct.teacher_id = ? AND c.is_deleted = 0""",
-            (teacher_id,),
+            "SELECT * FROM teachers WHERE class_id = ? AND is_deleted = 0",
+            (class_id,),
         )
-        return [row["class_id"] for row in self.cursor.fetchall()]
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    def is_assigned_to_class(self, teacher_id: int) -> bool:
+        """Check if a teacher is currently assigned to a class."""
+        teacher = self.get_by_id(teacher_id)
+        if not teacher:
+            return False
+        return teacher.get("class_id") is not None
 
     def exists(self, teacher_id: int) -> bool:
         """Check if a teacher exists (not soft-deleted)."""

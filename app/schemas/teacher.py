@@ -10,6 +10,8 @@ PHONE_REGEX = re.compile(r"^\+?[0-9\s\-\(\)]{7,20}$")
 class TeacherCreate(BaseModel):
     first_name: str = Field(..., examples=["Jane"])
     last_name: str = Field(..., examples=["Johnson"])
+    school_id: int = Field(..., examples=[1], description="ID of the school this teacher belongs to")
+    class_id: Optional[int] = Field(None, examples=[1], description="ID of the class this teacher is assigned to")
     email: Optional[str] = Field(None, examples=["jane.johnson@school.com"])
     phone: Optional[str] = Field(None, examples=["555-987-6543"])
     address: Optional[str] = Field(None, examples=["456 School Ave, City"])
@@ -32,6 +34,8 @@ class TeacherCreate(BaseModel):
 class TeacherUpdate(BaseModel):
     first_name: Optional[str] = Field(None, examples=["Jane"])
     last_name: Optional[str] = Field(None, examples=["Johnson"])
+    school_id: Optional[int] = Field(None, examples=[1], description="ID of the school this teacher belongs to")
+    class_id: Optional[int] = Field(None, examples=[1], description="ID of the class this teacher is assigned to")
     email: Optional[str] = Field(None, examples=["jane.johnson@school.com"])
     phone: Optional[str] = Field(None, examples=["555-987-6543"])
     address: Optional[str] = Field(None, examples=["456 School Ave, City"])
@@ -55,6 +59,8 @@ class TeacherResponse(BaseModel):
     teacher_id: int
     first_name: str
     last_name: str
+    school_id: int
+    class_id: Optional[int] = None
     email: Optional[str] = None
     phone: Optional[str] = None
     address: Optional[str] = None

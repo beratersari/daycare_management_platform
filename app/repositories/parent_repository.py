@@ -12,6 +12,7 @@ class ParentRepository(BaseRepository):
         self,
         first_name: str,
         last_name: str,
+        school_id: int,
         email: Optional[str],
         phone: Optional[str],
         address: Optional[str],
@@ -20,15 +21,16 @@ class ParentRepository(BaseRepository):
         created_date = get_current_datetime()
         self.cursor.execute(
             """INSERT INTO parents 
-               (first_name, last_name, email, phone, address, created_date, is_deleted) 
-               VALUES (?, ?, ?, ?, ?, ?, 0)""",
-            (first_name, last_name, email, phone, address, created_date),
+               (first_name, last_name, school_id, email, phone, address, created_date, is_deleted) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, 0)""",
+            (first_name, last_name, school_id, email, phone, address, created_date),
         )
         self.commit()
         return {
             "parent_id": self.cursor.lastrowid,
             "first_name": first_name,
             "last_name": last_name,
+            "school_id": school_id,
             "email": email,
             "phone": phone,
             "address": address,
@@ -61,11 +63,12 @@ class ParentRepository(BaseRepository):
 
         self.cursor.execute(
             """UPDATE parents 
-               SET first_name=?, last_name=?, email=?, phone=?, address=? 
+               SET first_name=?, last_name=?, school_id=?, email=?, phone=?, address=? 
                WHERE parent_id=? AND is_deleted = 0""",
             (
                 existing["first_name"],
                 existing["last_name"],
+                existing["school_id"],
                 existing["email"],
                 existing["phone"],
                 existing["address"],
@@ -87,6 +90,14 @@ class ParentRepository(BaseRepository):
         )
         self.commit()
         return True
+
+    def count_linked_students(self, parent_id: int) -> int:
+        """Count students linked to this parent."""
+        self.cursor.execute(
+            "SELECT COUNT(*) as count FROM student_parents WHERE parent_id = ?",
+            (parent_id,),
+        )
+        return self.cursor.fetchone()["count"]
 
     def get_student_ids(self, parent_id: int) -> list[int]:
         """Get all student IDs linked to this parent."""

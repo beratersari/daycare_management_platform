@@ -30,7 +30,10 @@ def create_student(
     """Create a new student with parents, allergies, and HW info."""
     result, error = service.create(student)
     if error:
-        raise HTTPException(status_code=404, detail=error)
+        if "not found" in error.lower():
+            raise HTTPException(status_code=404, detail=error)
+        else:
+            raise HTTPException(status_code=400, detail=error)
     return result
 
 
@@ -58,15 +61,21 @@ def update_student(
     """Update a student."""
     result, error = service.update(student_id, student)
     if error:
-        raise HTTPException(status_code=404, detail=error)
+        if "not found" in error.lower():
+            raise HTTPException(status_code=404, detail=error)
+        else:
+            raise HTTPException(status_code=400, detail=error)
     return result
 
 
 @router.delete("/{student_id}", status_code=204)
 def delete_student(student_id: int, service: StudentService = Depends(get_service)):
     """Soft delete a student."""
-    if not service.delete(student_id):
-        raise HTTPException(status_code=404, detail="Student not found")
+    success, error = service.delete(student_id)
+    if not success:
+        if "not found" in error.lower():
+            raise HTTPException(status_code=404, detail=error)
+        raise HTTPException(status_code=409, detail=error)
     return None
 
 

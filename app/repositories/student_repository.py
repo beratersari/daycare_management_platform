@@ -12,6 +12,7 @@ class StudentRepository(BaseRepository):
         self,
         first_name: str,
         last_name: str,
+        school_id: int,
         class_id: Optional[int],
         student_photo: Optional[str],
         date_of_birth: Optional[str],
@@ -20,15 +21,16 @@ class StudentRepository(BaseRepository):
         created_date = get_current_datetime()
         self.cursor.execute(
             """INSERT INTO students 
-               (first_name, last_name, class_id, student_photo, date_of_birth, created_date, is_deleted) 
-               VALUES (?, ?, ?, ?, ?, ?, 0)""",
-            (first_name, last_name, class_id, student_photo, date_of_birth, created_date),
+               (first_name, last_name, school_id, class_id, student_photo, date_of_birth, created_date, is_deleted) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, 0)""",
+            (first_name, last_name, school_id, class_id, student_photo, date_of_birth, created_date),
         )
         self.commit()
         return {
             "student_id": self.cursor.lastrowid,
             "first_name": first_name,
             "last_name": last_name,
+            "school_id": school_id,
             "class_id": class_id,
             "student_photo": student_photo,
             "date_of_birth": date_of_birth,
@@ -63,17 +65,18 @@ class StudentRepository(BaseRepository):
         if not existing:
             return None
 
-        for key in ("first_name", "last_name", "class_id", "student_photo", "date_of_birth"):
+        for key in ("first_name", "last_name", "school_id", "class_id", "student_photo", "date_of_birth"):
             if key in kwargs and kwargs[key] is not None:
                 existing[key] = kwargs[key]
 
         self.cursor.execute(
             """UPDATE students 
-               SET first_name=?, last_name=?, class_id=?, student_photo=?, date_of_birth=? 
+               SET first_name=?, last_name=?, school_id=?, class_id=?, student_photo=?, date_of_birth=? 
                WHERE student_id=? AND is_deleted = 0""",
             (
                 existing["first_name"],
                 existing["last_name"],
+                existing["school_id"],
                 existing["class_id"],
                 existing["student_photo"],
                 existing["date_of_birth"],
