@@ -20,15 +20,16 @@ class SchoolRepository(BaseRepository):
         director_name: Optional[str] = None,
         license_number: Optional[str] = None,
         capacity: Optional[int] = None,
+        active_term_id: Optional[int] = None,
     ) -> dict:
         """Create a new school record."""
         logger.debug("Inserting school record: %s", school_name)
         created_date = get_current_datetime()
         self.cursor.execute(
             """INSERT INTO schools 
-               (school_name, address, phone, email, director_name, license_number, capacity, created_date, is_deleted) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)""",
-            (school_name, address, phone, email, director_name, license_number, capacity, created_date),
+               (school_name, address, phone, email, director_name, license_number, capacity, active_term_id, created_date, is_deleted) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)""",
+            (school_name, address, phone, email, director_name, license_number, capacity, active_term_id, created_date),
         )
         self.commit()
         logger.trace("School record inserted with rowid=%s", self.cursor.lastrowid)
@@ -41,6 +42,7 @@ class SchoolRepository(BaseRepository):
             "director_name": director_name,
             "license_number": license_number,
             "capacity": capacity,
+            "active_term_id": active_term_id,
             "created_date": created_date,
         }
 
@@ -73,7 +75,7 @@ class SchoolRepository(BaseRepository):
 
         self.cursor.execute(
             """UPDATE schools 
-               SET school_name=?, address=?, phone=?, email=?, director_name=?, license_number=?, capacity=? 
+               SET school_name=?, address=?, phone=?, email=?, director_name=?, license_number=?, capacity=?, active_term_id=? 
                WHERE school_id=? AND is_deleted = 0""",
             (
                 existing["school_name"],
@@ -83,6 +85,7 @@ class SchoolRepository(BaseRepository):
                 existing["director_name"],
                 existing["license_number"],
                 existing["capacity"],
+                existing.get("active_term_id"),
                 school_id,
             ),
         )

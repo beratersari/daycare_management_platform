@@ -4,6 +4,7 @@ from typing import Optional
 
 from app.logger import get_logger
 from app.repositories.school_repository import SchoolRepository
+from app.repositories.term_repository import TermRepository
 from app.schemas.school import (
     SchoolCreate,
     SchoolResponse,
@@ -19,12 +20,27 @@ class SchoolService:
 
     def __init__(self, db: sqlite3.Connection):
         self.repo = SchoolRepository(db)
+        self.term_repo = TermRepository(db)
         logger.trace("SchoolService initialised")
 
-    def create(self, data: SchoolCreate) -> SchoolResponse:
-        """Create a new school."""
+    def create(self, data: SchoolCreate) -> tuple[SchoolResponse, Optional[str]]:
+        """Create a new school. Validates active_term_id and sets to 0 if term not found."""
         logger.info("Creating school: %s", data.school_name)
         logger.debug("School creation payload: %s", data.model_dump())
+        
+        active_term_id = data.active_term_id
+        warning_message = None
+        
+        # Validate active_term_id if provided
+        if active_term_id is not None and active_term_id != 0:
+            if not self.term_repo.exists(active_term_id):
+                logger.warning(
+                    "Term id=%s not found for school creation. Setting active_term_id to 0.",
+                    active_term_id
+                )
+                warning_message = f"Term with id={active_term_id} not found. active_term_id set to 0."
+                active_term_id = 0
+        
         result = self.repo.create(
             school_name=data.school_name,
             address=data.address,
@@ -33,9 +49,10 @@ class SchoolService:
             director_name=data.director_name,
             license_number=data.license_number,
             capacity=data.capacity,
+            active_term_id=active_term_id,
         )
         logger.info("School created successfully with id=%s", result["school_id"])
-        return SchoolResponse(**result)
+        return SchoolResponse(**result), warning_message
 
     def get_all(self) -> list[SchoolResponse]:
         """Get all schools."""
@@ -65,17 +82,31 @@ class SchoolService:
         logger.trace("School stats for id=%s: %s", school_id, stats)
         return SchoolWithStats(**school, **stats)
 
-    def update(self, school_id: int, data: SchoolUpdate) -> Optional[SchoolResponse]:
-        """Update a school."""
+    def update(self, school_id: int, data: SchoolUpdate) -> tuple[Optional[SchoolResponse], Optional[str]]:
+        """Update a school. Validates active_term_id and sets to 0 if term not found."""
         logger.info("Updating school: id=%s", school_id)
         update_data = data.model_dump(exclude_unset=True)
         logger.debug("School update data: %s", update_data)
+        
+        warning_message = None
+        
+        # Validate active_term_id if provided in update
+        if "active_term_id" in update_data and update_data["active_term_id"] is not None:
+            active_term_id = update_data["active_term_id"]
+            if active_term_id != 0 and not self.term_repo.exists(active_term_id):
+                logger.warning(
+                    "Term id=%s not found for school update. Setting active_term_id to 0.",
+                    active_term_id
+                )
+                warning_message = f"Term with id={active_term_id} not found. active_term_id set to 0."
+                update_data["active_term_id"] = 0
+        
         result = self.repo.update(school_id, **update_data)
         if not result:
             logger.warning("School not found for update: id=%s", school_id)
-            return None
+            return None, None
         logger.info("School updated successfully: id=%s", school_id)
-        return SchoolResponse(**result)
+        return SchoolResponse(**result), warning_message
 
     def delete(self, school_id: int) -> tuple[bool, Optional[str]]:
         """Soft delete a school if no active dependencies exist."""

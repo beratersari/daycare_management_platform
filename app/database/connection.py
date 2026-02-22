@@ -45,6 +45,7 @@ def init_db():
             director_name TEXT,
             license_number TEXT,
             capacity INTEGER,
+            active_term_id INTEGER,
             created_date TEXT NOT NULL,
             is_deleted INTEGER NOT NULL DEFAULT 0
         );
@@ -136,6 +137,47 @@ def init_db():
             is_deleted INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS terms (
+            term_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            term_name TEXT NOT NULL,
+            start_date TEXT NOT NULL,
+            end_date TEXT,
+            activity_status INTEGER NOT NULL DEFAULT 1,
+            term_img_url TEXT,
+            created_date TEXT NOT NULL,
+            is_deleted INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (school_id) REFERENCES schools(school_id) ON DELETE RESTRICT
+        );
+
+        CREATE TABLE IF NOT EXISTS class_terms (
+            class_id INTEGER NOT NULL,
+            term_id INTEGER NOT NULL,
+            PRIMARY KEY (class_id, term_id),
+            FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
+            FOREIGN KEY (term_id) REFERENCES terms(term_id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS meal_menus (
+            menu_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            class_id INTEGER,
+            menu_date TEXT NOT NULL,
+            breakfast TEXT,
+            lunch TEXT,
+            dinner TEXT,
+            breakfast_img_url TEXT,
+            lunch_img_url TEXT,
+            dinner_img_url TEXT,
+            created_by INTEGER,
+            created_date TEXT NOT NULL,
+            is_deleted INTEGER NOT NULL DEFAULT 0,
+            UNIQUE (school_id, menu_date, class_id),
+            FOREIGN KEY (school_id) REFERENCES schools(school_id) ON DELETE RESTRICT,
+            FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
+            FOREIGN KEY (created_by) REFERENCES teachers(teacher_id) ON DELETE SET NULL
+        );
     """)
 
     # Migration: if the students table still has the legacy class_id column,
@@ -170,6 +212,46 @@ def init_db():
             ALTER TABLE students_new RENAME TO students;
         """)
         logger.info("Migration of class_id column completed successfully")
+
+    # Migration: if the schools table doesn't have the active_term_id column, add it
+    cursor.execute("PRAGMA table_info(schools)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if "active_term_id" not in columns:
+        logger.info("Adding active_term_id column to schools table")
+        cursor.execute("ALTER TABLE schools ADD COLUMN active_term_id INTEGER")
+        logger.info("active_term_id column added to schools table successfully")
+
+    # Migration: if meal_menus table exists with old schema, migrate to new schema
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='meal_menus'")
+    if cursor.fetchone():
+        cursor.execute("PRAGMA table_info(meal_menus)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "meal_type" in columns:
+            logger.info("Migrating meal_menus table from old schema to new schema")
+            # Drop the old table and recreate with new schema
+            cursor.executescript("""
+                DROP TABLE IF EXISTS meal_menus;
+                CREATE TABLE meal_menus (
+                    menu_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    school_id INTEGER NOT NULL,
+                    class_id INTEGER,
+                    menu_date TEXT NOT NULL,
+                    breakfast TEXT,
+                    lunch TEXT,
+                    dinner TEXT,
+                    breakfast_img_url TEXT,
+                    lunch_img_url TEXT,
+                    dinner_img_url TEXT,
+                    created_by INTEGER,
+                    created_date TEXT NOT NULL,
+                    is_deleted INTEGER NOT NULL DEFAULT 0,
+                    UNIQUE (school_id, menu_date, class_id),
+                    FOREIGN KEY (school_id) REFERENCES schools(school_id) ON DELETE RESTRICT,
+                    FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
+                    FOREIGN KEY (created_by) REFERENCES teachers(teacher_id) ON DELETE SET NULL
+                );
+            """)
+            logger.info("meal_menus table migrated successfully")
 
     conn.commit()
     conn.close()

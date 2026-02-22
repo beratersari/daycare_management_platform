@@ -2,6 +2,7 @@
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional
 
 from app.database.connection import get_db
 from app.logger import get_logger
@@ -28,9 +29,12 @@ def create_school(
     school: SchoolCreate,
     service: SchoolService = Depends(get_service),
 ):
-    """Create a new school."""
+    """Create a new school. If active_term_id is invalid, it will be set to 0 with a warning."""
     logger.info("POST /api/v1/schools — create school request")
-    return service.create(school)
+    result, warning = service.create(school)
+    if warning:
+        result.message = warning
+    return result
 
 
 @router.get("/", response_model=list[SchoolResponse])
@@ -79,12 +83,14 @@ def update_school(
     school: SchoolUpdate,
     service: SchoolService = Depends(get_service),
 ):
-    """Update a school."""
+    """Update a school. If active_term_id is invalid, it will be set to 0 with a warning."""
     logger.info("PUT /api/v1/schools/%s — update school request", school_id)
-    result = service.update(school_id, school)
+    result, warning = service.update(school_id, school)
     if not result:
         logger.warning("PUT /api/v1/schools/%s — 404 not found", school_id)
         raise HTTPException(status_code=404, detail="School not found")
+    if warning:
+        result.message = warning
     return result
 
 

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 
 from app.logger import get_logger, setup_logging
 from app.database.connection import init_db
-from app.routers import parents, teachers, classes, students, schools
+from app.routers import parents, teachers, classes, students, schools, terms, meal_menus
 
 # Initialise logging as the very first step
 setup_logging()
@@ -34,6 +34,8 @@ app.include_router(parents.router)
 app.include_router(teachers.router)
 app.include_router(classes.router)
 app.include_router(students.router)
+app.include_router(terms.router)
+app.include_router(meal_menus.router)
 
 logger.debug("All routers registered")
 

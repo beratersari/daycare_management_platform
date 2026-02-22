@@ -19,6 +19,7 @@ class SchoolCreate(BaseModel):
     director_name: Optional[str] = Field(None, examples=["Dr. Sarah Johnson"])
     license_number: Optional[str] = Field(None, examples=["DC-2024-001"])
     capacity: Optional[int] = Field(None, examples=[100], description="Total capacity of the school")
+    active_term_id: Optional[int] = Field(None, examples=[1], description="ID of the active term (0 or None means no active term)")
 
     @field_validator("email")
     @classmethod
@@ -47,6 +48,7 @@ class SchoolUpdate(BaseModel):
     director_name: Optional[str] = Field(None, examples=["Dr. Sarah Johnson"])
     license_number: Optional[str] = Field(None, examples=["DC-2024-001"])
     capacity: Optional[int] = Field(None, examples=[100], description="Total capacity of the school")
+    active_term_id: Optional[int] = Field(None, examples=[1], description="ID of the active term (0 or None means no active term)")
 
     @field_validator("email")
     @classmethod
@@ -76,7 +78,9 @@ class SchoolResponse(BaseModel):
     director_name: Optional[str] = None
     license_number: Optional[str] = None
     capacity: Optional[int] = None
+    active_term_id: Optional[int] = None
     created_date: str
+    message: Optional[str] = None
 
 
 class SchoolWithStats(SchoolResponse):
