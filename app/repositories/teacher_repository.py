@@ -2,7 +2,10 @@
 import sqlite3
 from typing import Optional
 
+from app.logger import get_logger
 from app.repositories.base_repository import BaseRepository, get_current_datetime
+
+logger = get_logger(__name__)
 
 
 class TeacherRepository(BaseRepository):
@@ -19,6 +22,7 @@ class TeacherRepository(BaseRepository):
         address: Optional[str],
     ) -> dict:
         """Create a new teacher record."""
+        logger.debug("Inserting teacher record: %s %s", first_name, last_name)
         created_date = get_current_datetime()
         self.cursor.execute(
             """INSERT INTO teachers 
@@ -27,6 +31,7 @@ class TeacherRepository(BaseRepository):
             (first_name, last_name, school_id, class_id, email, phone, address, created_date),
         )
         self.commit()
+        logger.trace("Teacher record inserted with rowid=%s", self.cursor.lastrowid)
         return {
             "teacher_id": self.cursor.lastrowid,
             "first_name": first_name,
@@ -41,6 +46,7 @@ class TeacherRepository(BaseRepository):
 
     def get_by_id(self, teacher_id: int) -> Optional[dict]:
         """Get a teacher by ID (excluding soft-deleted)."""
+        logger.trace("SELECT teacher by id=%s", teacher_id)
         self.cursor.execute(
             "SELECT * FROM teachers WHERE teacher_id = ? AND is_deleted = 0",
             (teacher_id,),
@@ -50,11 +56,13 @@ class TeacherRepository(BaseRepository):
 
     def get_all(self) -> list[dict]:
         """Get all teachers (excluding soft-deleted)."""
+        logger.trace("SELECT all teachers")
         self.cursor.execute("SELECT * FROM teachers WHERE is_deleted = 0")
         return [dict(row) for row in self.cursor.fetchall()]
 
     def update(self, teacher_id: int, **kwargs) -> Optional[dict]:
         """Update a teacher record."""
+        logger.debug("Updating teacher record: id=%s, fields=%s", teacher_id, list(kwargs.keys()))
         existing = self.get_by_id(teacher_id)
         if not existing:
             return None
@@ -83,6 +91,7 @@ class TeacherRepository(BaseRepository):
 
     def soft_delete(self, teacher_id: int) -> bool:
         """Soft delete a teacher by setting is_deleted = 1."""
+        logger.debug("Soft-deleting teacher: id=%s", teacher_id)
         existing = self.get_by_id(teacher_id)
         if not existing:
             return False
@@ -92,23 +101,34 @@ class TeacherRepository(BaseRepository):
             (teacher_id,),
         )
         self.commit()
+        logger.trace("Teacher soft-deleted in DB: id=%s", teacher_id)
         return True
 
     def get_by_class_id(self, class_id: int) -> list[dict]:
         """Get all teachers in a class (excluding soft-deleted)."""
+        logger.trace("SELECT teachers by class_id=%s", class_id)
         self.cursor.execute(
             "SELECT * FROM teachers WHERE class_id = ? AND is_deleted = 0",
             (class_id,),
         )
-        return [dict(row) for row in self.cursor.fetchall()]
+        results = [dict(row) for row in self.cursor.fetchall()]
+        logger.trace("Found %d teacher(s) for class id=%s", len(results), class_id)
+        return results
 
     def is_assigned_to_class(self, teacher_id: int) -> bool:
         """Check if a teacher is currently assigned to a class."""
+        logger.trace("Checking if teacher id=%s is assigned to a class", teacher_id)
         teacher = self.get_by_id(teacher_id)
         if not teacher:
+            logger.trace("Teacher not found for class assignment check: id=%s", teacher_id)
             return False
-        return teacher.get("class_id") is not None
+        assigned = teacher.get("class_id") is not None
+        logger.trace("Teacher id=%s assigned to class: %s", teacher_id, assigned)
+        return assigned
 
     def exists(self, teacher_id: int) -> bool:
         """Check if a teacher exists (not soft-deleted)."""
-        return self.get_by_id(teacher_id) is not None
+        logger.trace("Checking if teacher exists: id=%s", teacher_id)
+        result = self.get_by_id(teacher_id) is not None
+        logger.trace("Teacher exists check result: id=%s → %s", teacher_id, result)
+        return result

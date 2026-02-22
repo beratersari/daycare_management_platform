@@ -2,25 +2,34 @@ import re
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 
+from app.logger import get_logger
+
+logger = get_logger(__name__)
+
 # Date format: YYYY-MM-DD
 DATE_REGEX = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def validate_date_format(v: Optional[str], field_name: str) -> Optional[str]:
     """Validate date format is YYYY-MM-DD."""
+    logger.trace("Validating date format for %s: %s", field_name, v)
     if v is not None:
         if not DATE_REGEX.match(v):
+            logger.warning("Invalid date format for %s: %s", field_name, v)
             raise ValueError(f"Invalid date format for {field_name}. Expected format: YYYY-MM-DD (e.g., 2024-01-15)")
         # Additional validation for valid date values
         try:
             year, month, day = map(int, v.split("-"))
             if month < 1 or month > 12:
+                logger.warning("Invalid month in %s: %s", field_name, v)
                 raise ValueError(f"Invalid month in {field_name}. Month must be between 01 and 12")
             if day < 1 or day > 31:
+                logger.warning("Invalid day in %s: %s", field_name, v)
                 raise ValueError(f"Invalid day in {field_name}. Day must be between 01 and 31")
         except ValueError as e:
             if "Invalid" in str(e):
                 raise
+            logger.warning("Invalid date value for %s: %s", field_name, v)
             raise ValueError(f"Invalid date format for {field_name}. Expected format: YYYY-MM-DD (e.g., 2024-01-15)")
     return v
 
@@ -48,8 +57,10 @@ class HWInfoCreate(BaseModel):
     @field_validator("measurement_date")
     @classmethod
     def validate_measurement_date(cls, v: str) -> str:
+        logger.trace("Validating measurement_date: %s", v)
         result = validate_date_format(v, "measurement_date")
         if result is None:
+            logger.warning("measurement_date is required but was None")
             raise ValueError("measurement_date is required")
         return result
 
@@ -67,7 +78,7 @@ class StudentCreate(BaseModel):
     first_name: str = Field(..., examples=["Charlie"])
     last_name: str = Field(..., examples=["Smith"])
     school_id: int = Field(..., examples=[1], description="ID of the school this student belongs to")
-    class_id: Optional[int] = Field(None, examples=[1])
+    class_ids: list[int] = Field(default=[], examples=[[1, 2]], description="IDs of the classes this student is enrolled in")
     student_photo: Optional[str] = Field(None, examples=["https://photos.example.com/charlie.jpg"])
     date_of_birth: Optional[str] = Field(None, examples=["2021-03-15"], description="Date in YYYY-MM-DD format")
     parent_ids: list[int] = Field(default=[], examples=[[1, 2]])
@@ -77,6 +88,7 @@ class StudentCreate(BaseModel):
     @field_validator("date_of_birth")
     @classmethod
     def validate_date_of_birth(cls, v: Optional[str]) -> Optional[str]:
+        logger.trace("Validating student date_of_birth: %s", v)
         return validate_date_format(v, "date_of_birth")
 
 
@@ -84,7 +96,7 @@ class StudentUpdate(BaseModel):
     first_name: Optional[str] = Field(None, examples=["Charlie"])
     last_name: Optional[str] = Field(None, examples=["Smith"])
     school_id: Optional[int] = Field(None, examples=[1], description="ID of the school this student belongs to")
-    class_id: Optional[int] = Field(None, examples=[1])
+    class_ids: Optional[list[int]] = Field(None, examples=[[1, 2]], description="IDs of the classes this student is enrolled in (replaces current enrollments)")
     student_photo: Optional[str] = Field(None, examples=["https://photos.example.com/charlie.jpg"])
     date_of_birth: Optional[str] = Field(None, examples=["2021-03-15"], description="Date in YYYY-MM-DD format")
     parent_ids: Optional[list[int]] = Field(None, examples=[[1, 2]])
@@ -94,6 +106,7 @@ class StudentUpdate(BaseModel):
     @field_validator("date_of_birth")
     @classmethod
     def validate_date_of_birth(cls, v: Optional[str]) -> Optional[str]:
+        logger.trace("Validating student update date_of_birth: %s", v)
         return validate_date_format(v, "date_of_birth")
 
 
@@ -102,7 +115,7 @@ class StudentResponse(BaseModel):
     first_name: str
     last_name: str
     school_id: int
-    class_id: Optional[int] = None
+    class_ids: list[int] = []
     student_photo: Optional[str] = None
     date_of_birth: Optional[str] = None
     created_date: str

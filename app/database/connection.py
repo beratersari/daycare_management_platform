@@ -1,11 +1,16 @@
 import sqlite3
 import os
 
+from app.logger import get_logger
+
+logger = get_logger(__name__)
+
 DB_PATH = "/testbed/db/kinder_tracker.db"
 
 
 def get_connection() -> sqlite3.Connection:
     """Get a new SQLite connection with row_factory set."""
+    logger.trace("Opening SQLite connection to %s", DB_PATH)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -14,15 +19,18 @@ def get_connection() -> sqlite3.Connection:
 
 def get_db():
     """FastAPI dependency that yields a database connection."""
+    logger.trace("get_db: yielding new connection")
     conn = get_connection()
     try:
         yield conn
     finally:
         conn.close()
+        logger.trace("get_db: connection closed")
 
 
 def init_db():
     """Initialize the database schema."""
+    logger.info("Initialising database at %s", DB_PATH)
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = get_connection()
     cursor = conn.cursor()
@@ -84,13 +92,19 @@ def init_db():
             first_name TEXT NOT NULL,
             last_name TEXT NOT NULL,
             school_id INTEGER NOT NULL,
-            class_id INTEGER,
             student_photo TEXT,
             date_of_birth TEXT,
             created_date TEXT NOT NULL,
             is_deleted INTEGER NOT NULL DEFAULT 0,
-            FOREIGN KEY (school_id) REFERENCES schools(school_id) ON DELETE RESTRICT,
-            FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE SET NULL
+            FOREIGN KEY (school_id) REFERENCES schools(school_id) ON DELETE RESTRICT
+        );
+
+        CREATE TABLE IF NOT EXISTS student_classes (
+            student_id INTEGER NOT NULL,
+            class_id INTEGER NOT NULL,
+            PRIMARY KEY (student_id, class_id),
+            FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
+            FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE
         );
 
         CREATE TABLE IF NOT EXISTS student_parents (
@@ -124,5 +138,39 @@ def init_db():
         );
     """)
 
+    # Migration: if the students table still has the legacy class_id column,
+    # migrate data into student_classes and rebuild the table without it.
+    cursor.execute("PRAGMA table_info(students)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if "class_id" in columns:
+        logger.info("Migrating legacy class_id column from students table to student_classes join table")
+        cursor.executescript("""
+            INSERT OR IGNORE INTO student_classes (student_id, class_id)
+                SELECT student_id, class_id FROM students
+                WHERE class_id IS NOT NULL AND is_deleted = 0;
+
+            CREATE TABLE students_new (
+                student_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                first_name TEXT NOT NULL,
+                last_name TEXT NOT NULL,
+                school_id INTEGER NOT NULL,
+                student_photo TEXT,
+                date_of_birth TEXT,
+                created_date TEXT NOT NULL,
+                is_deleted INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (school_id) REFERENCES schools(school_id) ON DELETE RESTRICT
+            );
+
+            INSERT INTO students_new
+                SELECT student_id, first_name, last_name, school_id,
+                       student_photo, date_of_birth, created_date, is_deleted
+                FROM students;
+
+            DROP TABLE students;
+            ALTER TABLE students_new RENAME TO students;
+        """)
+        logger.info("Migration of class_id column completed successfully")
+
     conn.commit()
     conn.close()
+    logger.info("Database schema initialised successfully")

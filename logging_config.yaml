@@ -1,0 +1,65 @@
+# =============================================================================
+# Kinder Tracker - Logging Configuration
+# =============================================================================
+# This file controls the logging behavior of the application.
+# You can enable/disable specific log levels and configure output targets.
+#
+# Log Levels (from most to least verbose):
+#   TRACE (5)   - Very detailed diagnostic info (custom level)
+#   DEBUG (10)  - Detailed diagnostic information
+#   INFO (20)   - General operational information
+#   WARNING (30)- Something unexpected but not critical
+#   ERROR (40)  - A serious problem that needs attention
+#
+# To disable a specific log level, set its 'enabled' flag to false.
+# =============================================================================
+
+# --- Log Level Switches ---
+# Enable or disable individual log levels globally.
+# When a level is disabled, messages at that level will be suppressed.
+log_levels:
+  trace: true
+  debug: true
+  info: true
+  warning: true
+  error: true
+
+# --- Log Format ---
+# Available placeholders:
+#   %(asctime)s      - Timestamp
+#   %(name)s         - Logger name (e.g., kinder_tracker.services.school)
+#   %(levelname)s    - Log level (TRACE, DEBUG, INFO, WARNING, ERROR)
+#   %(message)s      - The log message
+#   %(filename)s     - Source file name
+#   %(lineno)d       - Line number
+#   %(funcName)s     - Function name
+log_format: "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d - %(message)s"
+date_format: "%Y-%m-%d %H:%M:%S"
+
+# --- Console Output ---
+console:
+  enabled: true
+  # Minimum level to show on console: TRACE, DEBUG, INFO, WARNING, ERROR
+  level: "TRACE"
+
+# --- File Output ---
+file:
+  enabled: true
+  # Path to the log file
+  path: "logs/kinder_tracker.log"
+  # Minimum level to write to file: TRACE, DEBUG, INFO, WARNING, ERROR
+  level: "TRACE"
+  # Maximum size of a single log file in bytes (5 MB default)
+  max_bytes: 5242880
+  # Number of backup log files to keep
+  backup_count: 3
+
+# --- Per-Module Log Level Overrides ---
+# Override the minimum log level for specific modules.
+# This lets you silence noisy modules or increase verbosity for debugging.
+# Use the module path as the key (e.g., kinder_tracker.repositories.student).
+# module_overrides:
+#   kinder_tracker.database: "WARNING"
+#   kinder_tracker.repositories: "INFO"
+#   kinder_tracker.services: "DEBUG"
+#   kinder_tracker.routers: "INFO"
