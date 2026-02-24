@@ -46,11 +46,45 @@ class ClassRepository(BaseRepository):
         row = self.cursor.fetchone()
         return dict(row) if row else None
 
-    def get_all(self) -> list[dict]:
-        """Get all classes (excluding soft-deleted)."""
+    def get_all(self, search: Optional[str] = None) -> list[dict]:
+        """Get all classes (excluding soft-deleted), sorted by class_name, class_id."""
         logger.trace("SELECT all classes")
-        self.cursor.execute("SELECT * FROM classes WHERE is_deleted = 0")
+        query, params = self._build_search_query(search)
+        self.cursor.execute(
+            f"{query} ORDER BY class_name, class_id",
+            params,
+        )
         return [dict(row) for row in self.cursor.fetchall()]
+
+    def get_all_paginated(
+        self, page: int = 1, page_size: int = 10, search: Optional[str] = None
+    ) -> tuple[list[dict], int]:
+        """Get paginated classes (excluding soft-deleted), sorted by class_name, class_id."""
+        logger.debug("Fetching paginated classes: page=%d, page_size=%d", page, page_size)
+        query, params = self._build_search_query(search)
+        query = f"{query} ORDER BY class_name, class_id"
+        results, total = self.paginate(query, params, page, page_size)
+        logger.info("Retrieved %d classes out of %d total", len(results), total)
+        return results, total
+
+    def _build_search_query(self, search: Optional[str]) -> tuple[str, tuple]:
+        """Build search query for classes by name."""
+        base_query = "SELECT * FROM classes WHERE is_deleted = 0"
+        if not search:
+            return base_query, ()
+
+        terms = [term.strip() for term in search.split() if term.strip()]
+        if not terms:
+            return base_query, ()
+
+        like_clauses = []
+        params: list[str] = []
+        for term in terms:
+            like_clauses.append("class_name LIKE ?")
+            params.append(f"%{term}%")
+
+        where_clause = " AND ".join(like_clauses)
+        return f"{base_query} AND {where_clause}", tuple(params)
 
     def update(self, class_id: int, **kwargs) -> Optional[dict]:
         """Update a class record."""
@@ -153,3 +187,128 @@ class ClassRepository(BaseRepository):
         
         logger.trace("Class capacity check passed for id=%s: %d/%d", class_id, current_count, capacity)
         return True, None
+
+    # --- Attendance methods ---
+
+    def get_students_without_attendance(self, class_id: int, attendance_date: str) -> list[dict]:
+        """Get students in class who don't have attendance recorded for the given date."""
+        logger.debug("Fetching students without attendance for class_id=%s on date=%s", class_id, attendance_date)
+        self.cursor.execute(
+            """
+            SELECT s.* FROM students s
+            JOIN student_classes sc ON s.student_id = sc.student_id
+            WHERE sc.class_id = ? 
+              AND s.is_deleted = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM attendance a 
+                  WHERE a.student_id = s.student_id 
+                    AND a.class_id = ? 
+                    AND a.attendance_date = ?
+                    AND a.is_deleted = 0
+              )
+            ORDER BY s.first_name, s.last_name, s.student_id
+            """,
+            (class_id, class_id, attendance_date),
+        )
+        results = [dict(row) for row in self.cursor.fetchall()]
+        logger.info("Found %d students without attendance for class_id=%s on date=%s", len(results), class_id, attendance_date)
+        return results
+
+    def record_attendance(
+        self, 
+        class_id: int, 
+        student_id: int, 
+        attendance_date: str, 
+        status: str = "present",
+        recorded_by: Optional[int] = None,
+        notes: Optional[str] = None,
+    ) -> dict:
+        """Record attendance for a student on a specific date."""
+        logger.debug("Recording attendance: class_id=%s, student_id=%s, date=%s, status=%s", 
+                     class_id, student_id, attendance_date, status)
+        recorded_at = get_current_datetime()
+        
+        # Use INSERT OR REPLACE to handle both new records and updates
+        self.cursor.execute(
+            """
+            INSERT INTO attendance (class_id, student_id, attendance_date, status, recorded_by, recorded_at, notes, is_deleted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+            ON CONFLICT(class_id, student_id, attendance_date) 
+            DO UPDATE SET 
+                status = excluded.status,
+                recorded_by = excluded.recorded_by,
+                recorded_at = excluded.recorded_at,
+                notes = excluded.notes,
+                is_deleted = 0
+            """,
+            (class_id, student_id, attendance_date, status, recorded_by, recorded_at, notes),
+        )
+        self.commit()
+        
+        # Get the attendance_id
+        self.cursor.execute(
+            "SELECT attendance_id FROM attendance WHERE class_id = ? AND student_id = ? AND attendance_date = ?",
+            (class_id, student_id, attendance_date),
+        )
+        attendance_id = self.cursor.fetchone()["attendance_id"]
+        
+        logger.info("Attendance recorded: attendance_id=%s for student_id=%s on date=%s", 
+                    attendance_id, student_id, attendance_date)
+        return {
+            "attendance_id": attendance_id,
+            "class_id": class_id,
+            "student_id": student_id,
+            "attendance_date": attendance_date,
+            "status": status,
+            "recorded_by": recorded_by,
+            "recorded_at": recorded_at,
+            "notes": notes,
+        }
+
+    def get_attendance_for_date(self, class_id: int, attendance_date: str) -> list[dict]:
+        """Get all attendance records for a class on a specific date."""
+        logger.debug("Fetching attendance for class_id=%s on date=%s", class_id, attendance_date)
+        self.cursor.execute(
+            """
+            SELECT a.*, s.first_name, s.last_name 
+            FROM attendance a
+            JOIN students s ON a.student_id = s.student_id
+            WHERE a.class_id = ? 
+              AND a.attendance_date = ?
+              AND a.is_deleted = 0
+              AND s.is_deleted = 0
+            ORDER BY s.first_name, s.last_name, s.student_id
+            """,
+            (class_id, attendance_date),
+        )
+        results = [dict(row) for row in self.cursor.fetchall()]
+        logger.info("Found %d attendance records for class_id=%s on date=%s", len(results), class_id, attendance_date)
+        return results
+
+    def get_attendance_history(self, class_id: int, start_date: Optional[str] = None, end_date: Optional[str] = None) -> list[dict]:
+        """Get attendance history for a class with optional date range."""
+        logger.debug("Fetching attendance history for class_id=%s from %s to %s", class_id, start_date, end_date)
+        
+        query = """
+            SELECT a.*, s.first_name, s.last_name 
+            FROM attendance a
+            JOIN students s ON a.student_id = s.student_id
+            WHERE a.class_id = ? 
+              AND a.is_deleted = 0
+              AND s.is_deleted = 0
+        """
+        params: list = [class_id]
+        
+        if start_date:
+            query += " AND a.attendance_date >= ?"
+            params.append(start_date)
+        if end_date:
+            query += " AND a.attendance_date <= ?"
+            params.append(end_date)
+        
+        query += " ORDER BY a.attendance_date DESC, s.first_name, s.last_name, s.student_id"
+        
+        self.cursor.execute(query, params)
+        results = [dict(row) for row in self.cursor.fetchall()]
+        logger.info("Found %d attendance history records for class_id=%s", len(results), class_id)
+        return results

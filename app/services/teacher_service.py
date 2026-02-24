@@ -52,12 +52,21 @@ class TeacherService:
         logger.info("Teacher created successfully with id=%s", result["teacher_id"])
         return TeacherResponse(**result), None
 
-    def get_all(self) -> list[TeacherResponse]:
+    def get_all(self, search: Optional[str] = None) -> list[TeacherResponse]:
         """Get all teachers."""
         logger.debug("Fetching all teachers")
-        teachers = self.repo.get_all()
+        teachers = self.repo.get_all(search)
         logger.info("Retrieved %d teacher(s)", len(teachers))
         return [TeacherResponse(**t) for t in teachers]
+
+    def get_all_paginated(
+        self, page: int = 1, page_size: int = 10, search: Optional[str] = None
+    ) -> tuple[list[TeacherResponse], int]:
+        """Get paginated teachers."""
+        logger.debug("Fetching paginated teachers: page=%d, page_size=%d", page, page_size)
+        teachers, total = self.repo.get_all_paginated(page, page_size, search)
+        logger.info("Retrieved %d teacher(s) out of %d total", len(teachers), total)
+        return [TeacherResponse(**t) for t in teachers], total
 
     def get_by_id(self, teacher_id: int) -> Optional[TeacherResponse]:
         """Get a teacher by ID."""

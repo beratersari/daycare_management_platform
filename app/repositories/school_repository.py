@@ -56,11 +56,35 @@ class SchoolRepository(BaseRepository):
         row = self.cursor.fetchone()
         return dict(row) if row else None
 
-    def get_all(self) -> list[dict]:
-        """Get all schools (excluding soft-deleted)."""
+    def get_all(self, search: Optional[str] = None) -> list[dict]:
+        """Get all schools (excluding soft-deleted), sorted by school_name."""
         logger.trace("SELECT all schools")
-        self.cursor.execute("SELECT * FROM schools WHERE is_deleted = 0")
+        query, params = self._build_search_query(search)
+        self.cursor.execute(
+            f"{query} ORDER BY school_name",
+            params,
+        )
         return [dict(row) for row in self.cursor.fetchall()]
+
+    def _build_search_query(self, search: Optional[str]) -> tuple[str, tuple]:
+        """Build search query for schools by name or director name."""
+        base_query = "SELECT * FROM schools WHERE is_deleted = 0"
+        if not search:
+            return base_query, ()
+
+        terms = [term.strip() for term in search.split() if term.strip()]
+        if not terms:
+            return base_query, ()
+
+        like_clauses = []
+        params: list[str] = []
+        for term in terms:
+            like_clauses.append("(school_name LIKE ? OR director_name LIKE ?)")
+            wildcard = f"%{term}%"
+            params.extend([wildcard, wildcard])
+
+        where_clause = " AND ".join(like_clauses)
+        return f"{base_query} AND {where_clause}", tuple(params)
 
     def update(self, school_id: int, **kwargs) -> Optional[dict]:
         """Update a school record."""

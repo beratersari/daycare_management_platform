@@ -44,12 +44,21 @@ class ParentService:
         logger.info("Parent created successfully with id=%s", result["parent_id"])
         return ParentResponse(**result), None
 
-    def get_all(self) -> list[ParentResponse]:
+    def get_all(self, search: Optional[str] = None) -> list[ParentResponse]:
         """Get all parents."""
         logger.debug("Fetching all parents")
-        parents = self.repo.get_all()
+        parents = self.repo.get_all(search)
         logger.info("Retrieved %d parent(s)", len(parents))
         return [ParentResponse(**p) for p in parents]
+
+    def get_all_paginated(
+        self, page: int = 1, page_size: int = 10, search: Optional[str] = None
+    ) -> tuple[list[ParentResponse], int]:
+        """Get paginated parents."""
+        logger.debug("Fetching paginated parents: page=%d, page_size=%d", page, page_size)
+        parents, total = self.repo.get_all_paginated(page, page_size, search)
+        logger.info("Retrieved %d parent(s) out of %d total", len(parents), total)
+        return [ParentResponse(**p) for p in parents], total
 
     def get_by_id(self, parent_id: int) -> Optional[ParentWithStudents]:
         """Get a parent by ID with student IDs."""

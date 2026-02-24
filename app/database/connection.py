@@ -178,6 +178,22 @@ def init_db():
             FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
             FOREIGN KEY (created_by) REFERENCES teachers(teacher_id) ON DELETE SET NULL
         );
+
+        CREATE TABLE IF NOT EXISTS attendance (
+            attendance_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            class_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            attendance_date TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'present',
+            recorded_by INTEGER,
+            recorded_at TEXT NOT NULL,
+            notes TEXT,
+            is_deleted INTEGER NOT NULL DEFAULT 0,
+            UNIQUE (class_id, student_id, attendance_date),
+            FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
+            FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
+            FOREIGN KEY (recorded_by) REFERENCES teachers(teacher_id) ON DELETE SET NULL
+        );
     """)
 
     # Migration: if the students table still has the legacy class_id column,

@@ -1,7 +1,7 @@
 """Router layer for Parent endpoints."""
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.database.connection import get_db
 from app.logger import get_logger
@@ -12,6 +12,7 @@ from app.schemas.parent import (
     ParentUpdate,
     ParentWithStudents,
 )
+from app.schemas.pagination import PaginatedResponse
 
 logger = get_logger(__name__)
 
@@ -37,11 +38,33 @@ def create_parent(
     return result
 
 
-@router.get("/", response_model=list[ParentResponse])
-def list_parents(service: ParentService = Depends(get_service)):
-    """List all parents."""
-    logger.info("GET /api/v1/parents — list parents request")
-    return service.get_all()
+@router.get("/", response_model=PaginatedResponse[ParentResponse])
+def list_parents(
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(10, ge=1, le=100, description="Number of items per page (1-100)"),
+    search: str | None = Query(None, description="Search by parent first or last name"),
+    service: ParentService = Depends(get_service),
+):
+    """List all parents with pagination."""
+    logger.info(
+        "GET /api/v1/parents — list parents request (page=%d, page_size=%d, search=%s)",
+        page,
+        page_size,
+        search,
+    )
+    parents, total = service.get_all_paginated(page, page_size, search)
+    total_pages = (total + page_size - 1) // page_size
+    has_next = page < total_pages
+    has_previous = page > 1
+    return PaginatedResponse(
+        data=parents,
+        page=page,
+        page_size=page_size,
+        total=total,
+        total_pages=total_pages,
+        has_next=has_next,
+        has_previous=has_previous,
+    )
 
 
 @router.get("/{parent_id}", response_model=ParentWithStudents)

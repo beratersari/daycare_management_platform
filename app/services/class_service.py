@@ -55,12 +55,21 @@ class ClassService:
         logger.info("Class created successfully with id=%s", cls["class_id"])
         return self._build_response(cls), None
 
-    def get_all(self) -> list[ClassResponse]:
+    def get_all(self, search: Optional[str] = None) -> list[ClassResponse]:
         """Get all classes."""
         logger.debug("Fetching all classes")
-        classes = self.repo.get_all()
+        classes = self.repo.get_all(search)
         logger.info("Retrieved %d class(es)", len(classes))
         return [self._build_response(c) for c in classes]
+
+    def get_all_paginated(
+        self, page: int = 1, page_size: int = 10, search: Optional[str] = None
+    ) -> tuple[list[ClassResponse], int]:
+        """Get paginated classes."""
+        logger.debug("Fetching paginated classes: page=%d, page_size=%d", page, page_size)
+        classes, total = self.repo.get_all_paginated(page, page_size, search)
+        logger.info("Retrieved %d class(es) out of %d total", len(classes), total)
+        return [self._build_response(c) for c in classes], total
 
     def get_by_id(self, class_id: int) -> Optional[ClassResponse]:
         """Get a class by ID."""
@@ -168,6 +177,111 @@ class ClassService:
         
         logger.trace("Class capacity info for id=%s: %s", class_id, result)
         return result
+
+    # --- Attendance methods ---
+
+    def get_students_without_attendance(
+        self, class_id: int, attendance_date: str
+    ) -> list[StudentResponse]:
+        """Get students in class who don't have attendance recorded for the given date."""
+        logger.debug("Fetching students without attendance for class_id=%s on date=%s", class_id, attendance_date)
+        
+        # Verify class exists
+        if not self.repo.exists(class_id):
+            logger.warning("Class not found: id=%s", class_id)
+            return []
+        
+        students = self.repo.get_students_without_attendance(class_id, attendance_date)
+        logger.info("Retrieved %d students without attendance for class_id=%s on date=%s", 
+                    len(students), class_id, attendance_date)
+        return [self._build_student_response(s) for s in students]
+
+    def record_attendance(
+        self,
+        class_id: int,
+        student_id: int,
+        attendance_date: str,
+        status: str = "present",
+        recorded_by: Optional[int] = None,
+        notes: Optional[str] = None,
+    ) -> tuple[Optional[dict], Optional[str]]:
+        """Record attendance for a student on a specific date."""
+        logger.info("Recording attendance: class_id=%s, student_id=%s, date=%s, status=%s", 
+                    class_id, student_id, attendance_date, status)
+        
+        # Verify class exists
+        if not self.repo.exists(class_id):
+            logger.warning("Class not found for attendance recording: id=%s", class_id)
+            return None, "Class not found"
+        
+        # Verify student exists and is enrolled in the class
+        student = self.student_repo.get_by_id(student_id)
+        if not student:
+            logger.warning("Student not found for attendance recording: id=%s", student_id)
+            return None, "Student not found"
+        
+        # Check if student is enrolled in the class
+        class_ids = self.student_repo.get_class_ids(student_id)
+        if class_id not in class_ids:
+            logger.warning("Student id=%s is not enrolled in class id=%s", student_id, class_id)
+            return None, "Student is not enrolled in this class"
+        
+        # Validate recorded_by if provided
+        if recorded_by is not None:
+            teacher = self.teacher_repo.get_by_id(recorded_by)
+            if not teacher:
+                logger.warning("Teacher not found for attendance recording: id=%s", recorded_by)
+                return None, "Teacher not found"
+        
+        # Validate status
+        valid_statuses = ["present", "absent", "late", "excused"]
+        if status not in valid_statuses:
+            logger.warning("Invalid attendance status: %s", status)
+            return None, f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+        
+        result = self.repo.record_attendance(
+            class_id=class_id,
+            student_id=student_id,
+            attendance_date=attendance_date,
+            status=status,
+            recorded_by=recorded_by,
+            notes=notes,
+        )
+        
+        logger.info("Attendance recorded successfully: attendance_id=%s", result["attendance_id"])
+        return result, None
+
+    def get_attendance_for_date(self, class_id: int, attendance_date: str) -> list[dict]:
+        """Get all attendance records for a class on a specific date."""
+        logger.debug("Fetching attendance for class_id=%s on date=%s", class_id, attendance_date)
+        
+        # Verify class exists
+        if not self.repo.exists(class_id):
+            logger.warning("Class not found: id=%s", class_id)
+            return []
+        
+        attendance_records = self.repo.get_attendance_for_date(class_id, attendance_date)
+        logger.info("Retrieved %d attendance records for class_id=%s on date=%s", 
+                    len(attendance_records), class_id, attendance_date)
+        return attendance_records
+
+    def get_attendance_history(
+        self, 
+        class_id: int, 
+        start_date: Optional[str] = None, 
+        end_date: Optional[str] = None
+    ) -> list[dict]:
+        """Get attendance history for a class with optional date range."""
+        logger.debug("Fetching attendance history for class_id=%s from %s to %s", class_id, start_date, end_date)
+        
+        # Verify class exists
+        if not self.repo.exists(class_id):
+            logger.warning("Class not found: id=%s", class_id)
+            return []
+        
+        attendance_records = self.repo.get_attendance_history(class_id, start_date, end_date)
+        logger.info("Retrieved %d attendance history records for class_id=%s", len(attendance_records), class_id)
+        return attendance_records
 
     def _build_response(self, cls: dict) -> ClassResponse:
         """Build a ClassResponse with students and teachers."""

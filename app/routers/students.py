@@ -1,7 +1,7 @@
 """Router layer for Student endpoints."""
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.database.connection import get_db
 from app.logger import get_logger
@@ -15,6 +15,7 @@ from app.schemas.student import (
     StudentResponse,
     StudentUpdate,
 )
+from app.schemas.pagination import PaginatedResponse
 
 logger = get_logger(__name__)
 
@@ -44,11 +45,33 @@ def create_student(
     return result
 
 
-@router.get("/", response_model=list[StudentResponse])
-def list_students(service: StudentService = Depends(get_service)):
-    """List all students."""
-    logger.info("GET /api/v1/students — list students request")
-    return service.get_all()
+@router.get("/", response_model=PaginatedResponse[StudentResponse])
+def list_students(
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(10, ge=1, le=100, description="Number of items per page (1-100)"),
+    search: str | None = Query(None, description="Search by student first or last name"),
+    service: StudentService = Depends(get_service),
+):
+    """List all students with pagination."""
+    logger.info(
+        "GET /api/v1/students — list students request (page=%d, page_size=%d, search=%s)",
+        page,
+        page_size,
+        search,
+    )
+    students, total = service.get_all_paginated(page, page_size, search)
+    total_pages = (total + page_size - 1) // page_size
+    has_next = page < total_pages
+    has_previous = page > 1
+    return PaginatedResponse(
+        data=students,
+        page=page,
+        page_size=page_size,
+        total=total,
+        total_pages=total_pages,
+        has_next=has_next,
+        has_previous=has_previous,
+    )
 
 
 @router.get("/{student_id}", response_model=StudentResponse)

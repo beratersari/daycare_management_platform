@@ -54,10 +54,10 @@ class SchoolService:
         logger.info("School created successfully with id=%s", result["school_id"])
         return SchoolResponse(**result), warning_message
 
-    def get_all(self) -> list[SchoolResponse]:
+    def get_all(self, search: Optional[str] = None) -> list[SchoolResponse]:
         """Get all schools."""
         logger.debug("Fetching all schools")
-        schools = self.repo.get_all()
+        schools = self.repo.get_all(search)
         logger.info("Retrieved %d school(s)", len(schools))
         return [SchoolResponse(**s) for s in schools]
 

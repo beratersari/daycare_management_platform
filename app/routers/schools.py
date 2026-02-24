@@ -38,10 +38,13 @@ def create_school(
 
 
 @router.get("/", response_model=list[SchoolResponse])
-def list_schools(service: SchoolService = Depends(get_service)):
+def list_schools(
+    search: str | None = Query(None, description="Search by school or director name"),
+    service: SchoolService = Depends(get_service),
+):
     """List all schools."""
-    logger.info("GET /api/v1/schools — list schools request")
-    return service.get_all()
+    logger.info("GET /api/v1/schools — list schools request (search=%s)", search)
+    return service.get_all(search)
 
 
 @router.get("/{school_id}", response_model=SchoolResponse)

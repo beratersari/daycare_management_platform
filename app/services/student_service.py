@@ -111,12 +111,21 @@ class StudentService:
         logger.info("Student creation completed: id=%s", student_id)
         return self._build_response(student), None
 
-    def get_all(self) -> list[StudentResponse]:
+    def get_all(self, search: Optional[str] = None) -> list[StudentResponse]:
         """Get all students."""
         logger.debug("Fetching all students")
-        students = self.repo.get_all()
+        students = self.repo.get_all(search)
         logger.info("Retrieved %d student(s)", len(students))
         return [self._build_response(s) for s in students]
+
+    def get_all_paginated(
+        self, page: int = 1, page_size: int = 10, search: Optional[str] = None
+    ) -> tuple[list[StudentResponse], int]:
+        """Get paginated students."""
+        logger.debug("Fetching paginated students: page=%d, page_size=%d", page, page_size)
+        students, total = self.repo.get_all_paginated(page, page_size, search)
+        logger.info("Retrieved %d student(s) out of %d total", len(students), total)
+        return [self._build_response(s) for s in students], total
 
     def get_by_id(self, student_id: int) -> Optional[StudentResponse]:
         """Get a student by ID."""

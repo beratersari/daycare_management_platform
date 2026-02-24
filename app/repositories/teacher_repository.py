@@ -54,11 +54,46 @@ class TeacherRepository(BaseRepository):
         row = self.cursor.fetchone()
         return dict(row) if row else None
 
-    def get_all(self) -> list[dict]:
-        """Get all teachers (excluding soft-deleted)."""
+    def get_all(self, search: Optional[str] = None) -> list[dict]:
+        """Get all teachers (excluding soft-deleted), sorted by first_name, last_name, teacher_id."""
         logger.trace("SELECT all teachers")
-        self.cursor.execute("SELECT * FROM teachers WHERE is_deleted = 0")
+        query, params = self._build_search_query(search)
+        self.cursor.execute(
+            f"{query} ORDER BY first_name, last_name, teacher_id",
+            params,
+        )
         return [dict(row) for row in self.cursor.fetchall()]
+
+    def get_all_paginated(
+        self, page: int = 1, page_size: int = 10, search: Optional[str] = None
+    ) -> tuple[list[dict], int]:
+        """Get paginated teachers (excluding soft-deleted), sorted by first_name, last_name, teacher_id."""
+        logger.debug("Fetching paginated teachers: page=%d, page_size=%d", page, page_size)
+        query, params = self._build_search_query(search)
+        query = f"{query} ORDER BY first_name, last_name, teacher_id"
+        results, total = self.paginate(query, params, page, page_size)
+        logger.info("Retrieved %d teachers out of %d total", len(results), total)
+        return results, total
+
+    def _build_search_query(self, search: Optional[str]) -> tuple[str, tuple]:
+        """Build search query for teachers by first and last name."""
+        base_query = "SELECT * FROM teachers WHERE is_deleted = 0"
+        if not search:
+            return base_query, ()
+
+        terms = [term.strip() for term in search.split() if term.strip()]
+        if not terms:
+            return base_query, ()
+
+        like_clauses = []
+        params: list[str] = []
+        for term in terms:
+            like_clauses.append("(first_name LIKE ? OR last_name LIKE ?)")
+            wildcard = f"%{term}%"
+            params.extend([wildcard, wildcard])
+
+        where_clause = " AND ".join(like_clauses)
+        return f"{base_query} AND {where_clause}", tuple(params)
 
     def update(self, teacher_id: int, **kwargs) -> Optional[dict]:
         """Update a teacher record."""

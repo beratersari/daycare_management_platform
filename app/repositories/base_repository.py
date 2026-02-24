@@ -27,3 +27,33 @@ class BaseRepository:
         """Commit the current transaction."""
         logger.trace("Committing transaction (%s)", self.__class__.__name__)
         self.db.commit()
+
+    def paginate(self, query: str, params: tuple = (), page: int = 1, page_size: int = 10) -> tuple[list[dict], int]:
+        """
+        Execute a SELECT query with pagination.
+        
+        Args:
+            query: SQL SELECT query (should not include LIMIT/OFFSET)
+            params: Query parameters
+            page: Page number (1-indexed)
+            page_size: Number of items per page
+            
+        Returns:
+            Tuple of (paginated_results, total_count)
+        """
+        logger.trace("Paginating query: page=%d, page_size=%d", page, page_size)
+        
+        # Get total count
+        count_query = f"SELECT COUNT(*) as count FROM ({query})"
+        self.cursor.execute(count_query, params)
+        total = self.cursor.fetchone()["count"]
+        logger.trace("Total count for query: %d", total)
+        
+        # Get paginated results
+        offset = (page - 1) * page_size
+        paginated_query = f"{query} LIMIT ? OFFSET ?"
+        self.cursor.execute(paginated_query, params + (page_size, offset))
+        results = [dict(row) for row in self.cursor.fetchall()]
+        logger.trace("Retrieved %d results for page %d", len(results), page)
+        
+        return results, total
