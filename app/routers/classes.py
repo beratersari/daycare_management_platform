@@ -16,6 +16,13 @@ from app.schemas.class_dto import (
 )
 from app.schemas.pagination import PaginatedResponse
 from app.schemas.student import StudentResponse
+from app.auth.dependencies import (
+    get_current_user,
+    require_admin_or_director,
+    require_admin_director_or_teacher,
+    check_school_ownership,
+)
+from app.schemas.auth import UserRole
 
 logger = get_logger(__name__)
 
@@ -27,13 +34,45 @@ def get_service(db: sqlite3.Connection = Depends(get_db)) -> ClassService:
     return ClassService(db)
 
 
+def _check_teacher_class_access(current_user: dict, class_id: int, service: ClassService) -> None:
+    """Check that a TEACHER is assigned to the given class. ADMIN/DIRECTOR bypass."""
+    if current_user.get("role") in (UserRole.ADMIN.value, UserRole.DIRECTOR.value):
+        return
+    if current_user.get("role") == UserRole.TEACHER.value:
+        user_id = current_user.get("sub")
+        class_ids = service.user_repo.get_teacher_class_ids(user_id)
+        if class_id not in class_ids:
+            raise HTTPException(
+                status_code=403,
+                detail="You can only manage classes you are assigned to",
+            )
+
+
+def _check_parent_class_access(current_user: dict, class_id: int, service: ClassService) -> None:
+    """Check that a PARENT has a child enrolled in the given class."""
+    if current_user.get("role") != UserRole.PARENT.value:
+        return
+    user_id = current_user.get("sub")
+    student_ids = service.user_repo.get_student_ids_for_parent(user_id)
+    for sid in student_ids:
+        class_ids = service.student_repo.get_class_ids(sid)
+        if class_id in class_ids:
+            return
+    raise HTTPException(
+        status_code=403,
+        detail="You can only view classes your children are enrolled in",
+    )
+
+
 @router.post("/", response_model=ClassResponse, status_code=201)
 def create_class(
     cls: ClassCreate,
+    current_user: dict = Depends(require_admin_director_or_teacher),
     service: ClassService = Depends(get_service),
 ):
-    """Create a new class."""
+    """Create a new class. ADMIN, DIRECTOR, or TEACHER."""
     logger.info("POST /api/v1/classes — create class request")
+    check_school_ownership(current_user, cls.school_id)
     result, error = service.create(cls)
     if error:
         if "not found" in error.lower():
@@ -50,9 +89,10 @@ def list_classes(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(10, ge=1, le=100, description="Number of items per page (1-100)"),
     search: str | None = Query(None, description="Search by class name"),
+    current_user: dict = Depends(require_admin_director_or_teacher),
     service: ClassService = Depends(get_service),
 ):
-    """List all classes with pagination."""
+    """List all classes with pagination. ADMIN, DIRECTOR, or TEACHER."""
     logger.info(
         "GET /api/v1/classes — list classes request (page=%d, page_size=%d, search=%s)",
         page,
@@ -75,13 +115,22 @@ def list_classes(
 
 
 @router.get("/{class_id}", response_model=ClassResponse)
-def get_class(class_id: int, service: ClassService = Depends(get_service)):
-    """Get a class by ID with students and teachers."""
+def get_class(
+    class_id: int,
+    current_user: dict = Depends(get_current_user),
+    service: ClassService = Depends(get_service),
+):
+    """Get a class by ID. PARENT can only view classes their children are in."""
     logger.info("GET /api/v1/classes/%s — get class request", class_id)
+    # Parents can only see classes their children are enrolled in
+    if current_user.get("role") == UserRole.PARENT.value:
+        _check_parent_class_access(current_user, class_id, service)
     result = service.get_by_id(class_id)
     if not result:
         logger.warning("GET /api/v1/classes/%s — 404 not found", class_id)
         raise HTTPException(status_code=404, detail="Class not found")
+    if current_user.get("role") != UserRole.PARENT.value:
+        check_school_ownership(current_user, result.school_id)
     return result
 
 
@@ -89,10 +138,12 @@ def get_class(class_id: int, service: ClassService = Depends(get_service)):
 def update_class(
     class_id: int,
     cls: ClassUpdate,
+    current_user: dict = Depends(require_admin_director_or_teacher),
     service: ClassService = Depends(get_service),
 ):
-    """Update a class."""
+    """Update a class. TEACHER can only edit classes they are assigned to."""
     logger.info("PUT /api/v1/classes/%s — update class request", class_id)
+    _check_teacher_class_access(current_user, class_id, service)
     result, error = service.update(class_id, cls)
     if error:
         if "not found" in error.lower():
@@ -105,8 +156,12 @@ def update_class(
 
 
 @router.delete("/{class_id}", status_code=204)
-def delete_class(class_id: int, service: ClassService = Depends(get_service)):
-    """Soft delete a class."""
+def delete_class(
+    class_id: int,
+    current_user: dict = Depends(require_admin_or_director),
+    service: ClassService = Depends(get_service),
+):
+    """Soft delete a class. ADMIN or DIRECTOR only."""
     logger.info("DELETE /api/v1/classes/%s — delete class request", class_id)
     success, error = service.delete(class_id)
     if not success:
@@ -119,8 +174,12 @@ def delete_class(class_id: int, service: ClassService = Depends(get_service)):
 
 
 @router.get("/{class_id}/capacity")
-def get_class_capacity_info(class_id: int, service: ClassService = Depends(get_service)):
-    """Get class capacity information."""
+def get_class_capacity_info(
+    class_id: int,
+    current_user: dict = Depends(require_admin_director_or_teacher),
+    service: ClassService = Depends(get_service),
+):
+    """Get class capacity information. ADMIN, DIRECTOR, or TEACHER."""
     logger.info("GET /api/v1/classes/%s/capacity — capacity info request", class_id)
     result = service.get_capacity_info(class_id)
     if not result:
@@ -136,11 +195,12 @@ def get_class_capacity_info(class_id: int, service: ClassService = Depends(get_s
 def get_students_without_attendance(
     class_id: int,
     attendance_date: str = Query(..., description="Date in YYYY-MM-DD format"),
+    current_user: dict = Depends(require_admin_director_or_teacher),
     service: ClassService = Depends(get_service),
 ):
     """
     Get students in class who don't have attendance recorded for the given date.
-    These are the students whose attendance still needs to be recorded.
+    ADMIN, DIRECTOR, or TEACHER.
     """
     logger.info(
         "GET /api/v1/classes/%s/attendance/pending — get students without attendance for date=%s",
@@ -148,10 +208,11 @@ def get_students_without_attendance(
         attendance_date,
     )
     
-    # Verify class exists
     if not service.exists(class_id):
         logger.warning("GET /api/v1/classes/%s/attendance/pending — 404 not found", class_id)
         raise HTTPException(status_code=404, detail="Class not found")
+    
+    _check_teacher_class_access(current_user, class_id, service)
     
     students = service.get_students_without_attendance(class_id, attendance_date)
     logger.info(
@@ -168,11 +229,12 @@ def record_attendance(
     attendance_record: AttendanceRecord,
     attendance_date: str = Query(..., description="Date in YYYY-MM-DD format"),
     recorded_by: Optional[int] = Query(None, description="ID of the teacher recording attendance"),
+    current_user: dict = Depends(require_admin_director_or_teacher),
     service: ClassService = Depends(get_service),
 ):
     """
     Record attendance for a student on a specific date.
-    Status can be: present, absent, late, or excused.
+    ADMIN, DIRECTOR, or TEACHER (must be assigned to the class).
     """
     logger.info(
         "POST /api/v1/classes/%s/attendance — record attendance for student_id=%s on date=%s",
@@ -180,6 +242,8 @@ def record_attendance(
         attendance_record.student_id,
         attendance_date,
     )
+    
+    _check_teacher_class_access(current_user, class_id, service)
     
     result, error = service.record_attendance(
         class_id=class_id,
@@ -219,9 +283,10 @@ def record_attendance(
 def get_attendance_for_date(
     class_id: int,
     attendance_date: str = Query(..., description="Date in YYYY-MM-DD format"),
+    current_user: dict = Depends(require_admin_director_or_teacher),
     service: ClassService = Depends(get_service),
 ):
-    """Get all attendance records for a class on a specific date."""
+    """Get all attendance records for a class on a specific date. ADMIN, DIRECTOR, or TEACHER."""
     logger.info(
         "GET /api/v1/classes/%s/attendance — get attendance for date=%s",
         class_id,
@@ -261,9 +326,10 @@ def get_attendance_history(
     class_id: int,
     start_date: Optional[str] = Query(None, description="Start date in YYYY-MM-DD format"),
     end_date: Optional[str] = Query(None, description="End date in YYYY-MM-DD format"),
+    current_user: dict = Depends(require_admin_director_or_teacher),
     service: ClassService = Depends(get_service),
 ):
-    """Get attendance history for a class with optional date range."""
+    """Get attendance history for a class with optional date range. ADMIN, DIRECTOR, or TEACHER."""
     logger.info(
         "GET /api/v1/classes/%s/attendance/history — get history from %s to %s",
         class_id,

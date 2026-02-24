@@ -145,7 +145,9 @@ class ClassRepository(BaseRepository):
         """Count active teachers assigned to a class."""
         logger.trace("Counting active teachers for class id=%s", class_id)
         self.cursor.execute(
-            "SELECT COUNT(*) as count FROM teachers WHERE class_id = ? AND is_deleted = 0",
+            """SELECT COUNT(*) as count FROM teacher_classes tc
+               JOIN users u ON tc.user_id = u.user_id
+               WHERE tc.class_id = ? AND u.is_deleted = 0 AND u.role = 'TEACHER'""",
             (class_id,),
         )
         count = self.cursor.fetchone()["count"]

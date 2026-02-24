@@ -81,7 +81,7 @@ class StudentCreate(BaseModel):
     class_ids: list[int] = Field(default=[], examples=[[1, 2]], description="IDs of the classes this student is enrolled in")
     student_photo: Optional[str] = Field(None, examples=["https://photos.example.com/charlie.jpg"])
     date_of_birth: Optional[str] = Field(None, examples=["2021-03-15"], description="Date in YYYY-MM-DD format")
-    parent_ids: list[int] = Field(default=[], examples=[[1, 2]])
+    parent_ids: list[int] = Field(default=[], examples=[[1, 2]], description="Parent user IDs linked to this student")
     allergies: list[AllergyCreate] = []
     hw_info: list[HWInfoCreate] = []
 
@@ -99,7 +99,7 @@ class StudentUpdate(BaseModel):
     class_ids: Optional[list[int]] = Field(None, examples=[[1, 2]], description="IDs of the classes this student is enrolled in (replaces current enrollments)")
     student_photo: Optional[str] = Field(None, examples=["https://photos.example.com/charlie.jpg"])
     date_of_birth: Optional[str] = Field(None, examples=["2021-03-15"], description="Date in YYYY-MM-DD format")
-    parent_ids: Optional[list[int]] = Field(None, examples=[[1, 2]])
+    parent_ids: Optional[list[int]] = Field(None, examples=[[1, 2]], description="Parent user IDs linked to this student")
     allergies: Optional[list[AllergyCreate]] = None
     hw_info: Optional[list[HWInfoCreate]] = None
 
@@ -119,6 +119,6 @@ class StudentResponse(BaseModel):
     student_photo: Optional[str] = None
     date_of_birth: Optional[str] = None
     created_date: str
-    parents: list[int] = []
+    parents: list[int] = Field(default=[], description="Parent user IDs linked to this student")
     student_allergies: list[AllergyResponse] = []
     student_hw_info: list[HWInfoResponse] = []

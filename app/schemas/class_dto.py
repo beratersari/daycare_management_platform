@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 from app.schemas.student import StudentResponse
-from app.schemas.teacher import TeacherResponse
+from app.schemas.auth import UserResponse
 
 
 class ClassCreate(BaseModel):
@@ -24,7 +24,7 @@ class ClassResponse(BaseModel):
     capacity: Optional[int] = None
     created_date: str
     students: list[StudentResponse] = []
-    teachers: list[TeacherResponse] = []
+    teachers: list[UserResponse] = []
 
 
 class AttendanceRecord(BaseModel):

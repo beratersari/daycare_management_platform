@@ -6,8 +6,9 @@ from app.logger import get_logger
 from app.repositories.meal_menu_repository import MealMenuRepository
 from app.repositories.school_repository import SchoolRepository
 from app.repositories.class_repository import ClassRepository
-from app.repositories.teacher_repository import TeacherRepository
+from app.repositories.user_repository import UserRepository
 from app.schemas.meal_menu import MealMenuCreate, MealMenuResponse, MealMenuUpdate
+from app.schemas.auth import UserRole
 
 logger = get_logger(__name__)
 
@@ -20,7 +21,7 @@ class MealMenuService:
         self.repo = MealMenuRepository(db)
         self.school_repo = SchoolRepository(db)
         self.class_repo = ClassRepository(db)
-        self.teacher_repo = TeacherRepository(db)
+        self.user_repo = UserRepository(db)
         logger.trace("MealMenuService initialised")
 
     def create(
@@ -44,9 +45,11 @@ class MealMenuService:
             return None, "Class not found"
 
         # Validate teacher exists if created_by is provided
-        if created_by is not None and not self.teacher_repo.exists(created_by):
-            logger.warning("Teacher not found during meal menu creation: teacher_id=%s", created_by)
-            return None, "Teacher not found"
+        if created_by is not None:
+            teacher = self.user_repo.get_by_id(created_by)
+            if not teacher or teacher.get("role") != UserRole.TEACHER.value:
+                logger.warning("Teacher not found during meal menu creation: user_id=%s", created_by)
+                return None, "Teacher not found"
 
         # Check for duplicate entry (only one menu per school/class/date)
         if self.repo.check_duplicate(data.school_id, data.menu_date, data.class_id):

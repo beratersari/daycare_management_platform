@@ -16,6 +16,13 @@ from app.schemas.student import (
     StudentUpdate,
 )
 from app.schemas.pagination import PaginatedResponse
+from app.auth.dependencies import (
+    get_current_user,
+    require_admin_or_director,
+    require_admin_director_or_teacher,
+    check_school_ownership,
+)
+from app.schemas.auth import UserRole
 
 logger = get_logger(__name__)
 
@@ -27,13 +34,30 @@ def get_service(db: sqlite3.Connection = Depends(get_db)) -> StudentService:
     return StudentService(db)
 
 
+def _check_parent_student_access(current_user: dict, student_id: int, db: sqlite3.Connection) -> None:
+    """Check that a PARENT can only access their own children."""
+    if current_user.get("role") != UserRole.PARENT.value:
+        return
+    user_id = current_user.get("sub")
+    from app.repositories.user_repository import UserRepository
+    user_repo = UserRepository(db)
+    student_ids = user_repo.get_student_ids_for_parent(user_id)
+    if student_id not in student_ids:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only view information about your own children",
+        )
+
+
 @router.post("/", response_model=StudentResponse, status_code=201)
 def create_student(
     student: StudentCreate,
+    current_user: dict = Depends(require_admin_director_or_teacher),
     service: StudentService = Depends(get_service),
 ):
-    """Create a new student with parents, allergies, and HW info."""
+    """Create a new student. ADMIN, DIRECTOR, or TEACHER."""
     logger.info("POST /api/v1/students — create student request")
+    check_school_ownership(current_user, student.school_id)
     result, error = service.create(student)
     if error:
         if "not found" in error.lower():
@@ -50,9 +74,10 @@ def list_students(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(10, ge=1, le=100, description="Number of items per page (1-100)"),
     search: str | None = Query(None, description="Search by student first or last name"),
+    current_user: dict = Depends(require_admin_director_or_teacher),
     service: StudentService = Depends(get_service),
 ):
-    """List all students with pagination."""
+    """List all students with pagination. ADMIN, DIRECTOR, or TEACHER."""
     logger.info(
         "GET /api/v1/students — list students request (page=%d, page_size=%d, search=%s)",
         page,
@@ -75,9 +100,14 @@ def list_students(
 
 
 @router.get("/{student_id}", response_model=StudentResponse)
-def get_student(student_id: int, service: StudentService = Depends(get_service)):
-    """Get a student by ID with full details."""
+def get_student(
+    student_id: int,
+    current_user: dict = Depends(get_current_user),
+    service: StudentService = Depends(get_service),
+):
+    """Get a student by ID. PARENT can only view their own children."""
     logger.info("GET /api/v1/students/%s — get student request", student_id)
+    _check_parent_student_access(current_user, student_id, service.db)
     result = service.get_by_id(student_id)
     if not result:
         logger.warning("GET /api/v1/students/%s — 404 not found", student_id)
@@ -89,9 +119,10 @@ def get_student(student_id: int, service: StudentService = Depends(get_service))
 def update_student(
     student_id: int,
     student: StudentUpdate,
+    current_user: dict = Depends(require_admin_director_or_teacher),
     service: StudentService = Depends(get_service),
 ):
-    """Update a student."""
+    """Update a student. ADMIN, DIRECTOR, or TEACHER."""
     logger.info("PUT /api/v1/students/%s — update student request", student_id)
     result, error = service.update(student_id, student)
     if error:
@@ -105,8 +136,12 @@ def update_student(
 
 
 @router.delete("/{student_id}", status_code=204)
-def delete_student(student_id: int, service: StudentService = Depends(get_service)):
-    """Soft delete a student."""
+def delete_student(
+    student_id: int,
+    current_user: dict = Depends(require_admin_or_director),
+    service: StudentService = Depends(get_service),
+):
+    """Soft delete a student. ADMIN or DIRECTOR only."""
     logger.info("DELETE /api/v1/students/%s — delete student request", student_id)
     success, error = service.delete(student_id)
     if not success:
@@ -125,9 +160,10 @@ def delete_student(student_id: int, service: StudentService = Depends(get_servic
 def enroll_in_class(
     student_id: int,
     class_id: int,
+    current_user: dict = Depends(require_admin_director_or_teacher),
     service: StudentService = Depends(get_service),
 ):
-    """Enroll a student in a class."""
+    """Enroll a student in a class. ADMIN, DIRECTOR, or TEACHER."""
     logger.info("POST /api/v1/students/%s/classes/%s — enroll student in class", student_id, class_id)
     result, error = service.enroll_in_class(student_id, class_id)
     if error:
@@ -143,9 +179,10 @@ def enroll_in_class(
 def unenroll_from_class(
     student_id: int,
     class_id: int,
+    current_user: dict = Depends(require_admin_or_director),
     service: StudentService = Depends(get_service),
 ):
-    """Unenroll a student from a class."""
+    """Unenroll a student from a class. ADMIN or DIRECTOR only."""
     logger.info("DELETE /api/v1/students/%s/classes/%s — unenroll student from class", student_id, class_id)
     success, error = service.unenroll_from_class(student_id, class_id)
     if not success:
@@ -166,9 +203,10 @@ def unenroll_from_class(
 def add_allergy(
     student_id: int,
     allergy: AllergyCreate,
+    current_user: dict = Depends(require_admin_director_or_teacher),
     service: StudentService = Depends(get_service),
 ):
-    """Add an allergy to a student."""
+    """Add an allergy to a student. ADMIN, DIRECTOR, or TEACHER."""
     logger.info("POST /api/v1/students/%s/allergies — add allergy request", student_id)
     result, error = service.add_allergy(student_id, allergy)
     if error:
@@ -181,9 +219,10 @@ def add_allergy(
 def remove_allergy(
     student_id: int,
     allergy_id: int,
+    current_user: dict = Depends(require_admin_director_or_teacher),
     service: StudentService = Depends(get_service),
 ):
-    """Soft delete an allergy."""
+    """Soft delete an allergy. ADMIN, DIRECTOR, or TEACHER."""
     logger.info("DELETE /api/v1/students/%s/allergies/%s — remove allergy request", student_id, allergy_id)
     success, error = service.delete_allergy(student_id, allergy_id)
     if not success:
@@ -201,9 +240,10 @@ def remove_allergy(
 def add_hw_info(
     student_id: int,
     hw_info: HWInfoCreate,
+    current_user: dict = Depends(require_admin_director_or_teacher),
     service: StudentService = Depends(get_service),
 ):
-    """Add HW info to a student."""
+    """Add HW info to a student. ADMIN, DIRECTOR, or TEACHER."""
     logger.info("POST /api/v1/students/%s/hw-info — add HW info request", student_id)
     result, error = service.add_hw_info(student_id, hw_info)
     if error:
@@ -216,9 +256,10 @@ def add_hw_info(
 def remove_hw_info(
     student_id: int,
     hw_id: int,
+    current_user: dict = Depends(require_admin_director_or_teacher),
     service: StudentService = Depends(get_service),
 ):
-    """Soft delete an HW info record."""
+    """Soft delete an HW info record. ADMIN, DIRECTOR, or TEACHER."""
     logger.info("DELETE /api/v1/students/%s/hw-info/%s — remove HW info request", student_id, hw_id)
     success, error = service.delete_hw_info(student_id, hw_id)
     if not success:

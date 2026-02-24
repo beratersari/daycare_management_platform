@@ -50,19 +50,6 @@ def init_db():
             is_deleted INTEGER NOT NULL DEFAULT 0
         );
 
-        CREATE TABLE IF NOT EXISTS parents (
-            parent_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            first_name TEXT NOT NULL,
-            last_name TEXT NOT NULL,
-            school_id INTEGER NOT NULL,
-            email TEXT,
-            phone TEXT,
-            address TEXT,
-            created_date TEXT NOT NULL,
-            is_deleted INTEGER NOT NULL DEFAULT 0,
-            FOREIGN KEY (school_id) REFERENCES schools(school_id) ON DELETE RESTRICT
-        );
-
         CREATE TABLE IF NOT EXISTS classes (
             class_id INTEGER PRIMARY KEY AUTOINCREMENT,
             class_name TEXT NOT NULL,
@@ -71,21 +58,6 @@ def init_db():
             created_date TEXT NOT NULL,
             is_deleted INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (school_id) REFERENCES schools(school_id) ON DELETE RESTRICT
-        );
-
-        CREATE TABLE IF NOT EXISTS teachers (
-            teacher_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            first_name TEXT NOT NULL,
-            last_name TEXT NOT NULL,
-            school_id INTEGER NOT NULL,
-            class_id INTEGER,
-            email TEXT,
-            phone TEXT,
-            address TEXT,
-            created_date TEXT NOT NULL,
-            is_deleted INTEGER NOT NULL DEFAULT 0,
-            FOREIGN KEY (school_id) REFERENCES schools(school_id) ON DELETE RESTRICT,
-            FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE SET NULL
         );
 
         CREATE TABLE IF NOT EXISTS students (
@@ -110,10 +82,18 @@ def init_db():
 
         CREATE TABLE IF NOT EXISTS student_parents (
             student_id INTEGER NOT NULL,
-            parent_id INTEGER NOT NULL,
-            PRIMARY KEY (student_id, parent_id),
+            user_id INTEGER NOT NULL,
+            PRIMARY KEY (student_id, user_id),
             FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
-            FOREIGN KEY (parent_id) REFERENCES parents(parent_id) ON DELETE CASCADE
+            FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS teacher_classes (
+            user_id INTEGER NOT NULL,
+            class_id INTEGER NOT NULL,
+            PRIMARY KEY (user_id, class_id),
+            FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+            FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE
         );
 
         CREATE TABLE IF NOT EXISTS student_allergies (
@@ -176,7 +156,7 @@ def init_db():
             UNIQUE (school_id, menu_date, class_id),
             FOREIGN KEY (school_id) REFERENCES schools(school_id) ON DELETE RESTRICT,
             FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
-            FOREIGN KEY (created_by) REFERENCES teachers(teacher_id) ON DELETE SET NULL
+            FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL
         );
 
         CREATE TABLE IF NOT EXISTS attendance (
@@ -192,7 +172,32 @@ def init_db():
             UNIQUE (class_id, student_id, attendance_date),
             FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
             FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
-            FOREIGN KEY (recorded_by) REFERENCES teachers(teacher_id) ON DELETE SET NULL
+            FOREIGN KEY (recorded_by) REFERENCES users(user_id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'PARENT',
+            school_id INTEGER,
+            phone TEXT,
+            address TEXT,
+            created_date TEXT NOT NULL,
+            is_deleted INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (school_id) REFERENCES schools(school_id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS refresh_tokens (
+            token_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token_hash TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            revoked INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
         );
     """)
 
@@ -237,6 +242,69 @@ def init_db():
         cursor.execute("ALTER TABLE schools ADD COLUMN active_term_id INTEGER")
         logger.info("active_term_id column added to schools table successfully")
 
+    # Migration: ensure users table has phone/address columns
+    cursor.execute("PRAGMA table_info(users)")
+    user_columns = [row[1] for row in cursor.fetchall()]
+    if "phone" not in user_columns:
+        logger.info("Adding phone column to users table")
+        cursor.execute("ALTER TABLE users ADD COLUMN phone TEXT")
+        logger.info("phone column added to users table successfully")
+    if "address" not in user_columns:
+        logger.info("Adding address column to users table")
+        cursor.execute("ALTER TABLE users ADD COLUMN address TEXT")
+        logger.info("address column added to users table successfully")
+
+    # Migration: ensure teacher_classes join table exists
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='teacher_classes'")
+    if not cursor.fetchone():
+        logger.info("Creating teacher_classes join table")
+        cursor.execute(
+            """CREATE TABLE teacher_classes (
+                   user_id INTEGER NOT NULL,
+                   class_id INTEGER NOT NULL,
+                   PRIMARY KEY (user_id, class_id),
+                   FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                   FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE
+               )"""
+        )
+
+    # Migration: migrate student_parents to reference users directly
+    cursor.execute("PRAGMA table_info(student_parents)")
+    sp_columns = [row[1] for row in cursor.fetchall()]
+    if "parent_id" in sp_columns:
+        logger.info("Migrating student_parents to use user_id")
+        cursor.executescript("""
+            ALTER TABLE student_parents RENAME TO student_parents_old;
+            CREATE TABLE student_parents (
+                student_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                PRIMARY KEY (student_id, user_id),
+                FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+            );
+            INSERT OR IGNORE INTO student_parents (student_id, user_id)
+                SELECT sp.student_id, p.user_id
+                FROM student_parents_old sp
+                JOIN parents p ON sp.parent_id = p.parent_id
+                WHERE p.user_id IS NOT NULL;
+            DROP TABLE student_parents_old;
+        """)
+        logger.info("student_parents migration completed")
+
+    # Migration: remove legacy teachers/parents tables if present
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='teachers'")
+    if cursor.fetchone():
+        logger.info("Dropping legacy teachers table")
+        cursor.execute("DROP TABLE IF EXISTS teachers")
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='parents'")
+    if cursor.fetchone():
+        logger.info("Dropping legacy parents table")
+        cursor.execute("DROP TABLE IF EXISTS parents")
+
+    # Migration: if teachers/parents tables were removed, drop any stale teacher/parent indexes
+    cursor.execute("DROP INDEX IF EXISTS idx_teachers_school_id")
+    cursor.execute("DROP INDEX IF EXISTS idx_parents_school_id")
+
     # Migration: if meal_menus table exists with old schema, migrate to new schema
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='meal_menus'")
     if cursor.fetchone():
@@ -264,7 +332,7 @@ def init_db():
                     UNIQUE (school_id, menu_date, class_id),
                     FOREIGN KEY (school_id) REFERENCES schools(school_id) ON DELETE RESTRICT,
                     FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
-                    FOREIGN KEY (created_by) REFERENCES teachers(teacher_id) ON DELETE SET NULL
+                    FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL
                 );
             """)
             logger.info("meal_menus table migrated successfully")

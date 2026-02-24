@@ -209,15 +209,15 @@ class StudentRepository(BaseRepository):
 
     # --- Parent links ---
 
-    def link_parent(self, student_id: int, parent_id: int):
-        """Link a parent to a student."""
-        logger.debug("Linking parent id=%s to student id=%s", parent_id, student_id)
+    def link_parent(self, student_id: int, user_id: int):
+        """Link a parent user to a student."""
+        logger.debug("Linking parent user id=%s to student id=%s", user_id, student_id)
         self.cursor.execute(
-            "INSERT OR IGNORE INTO student_parents (student_id, parent_id) VALUES (?, ?)",
-            (student_id, parent_id),
+            "INSERT OR IGNORE INTO student_parents (student_id, user_id) VALUES (?, ?)",
+            (student_id, user_id),
         )
         self.commit()
-        logger.trace("Parent-student link created: parent_id=%s, student_id=%s", parent_id, student_id)
+        logger.trace("Parent-student link created: user_id=%s, student_id=%s", user_id, student_id)
 
     def unlink_all_parents(self, student_id: int):
         """Remove all parent links for a student."""
@@ -230,16 +230,16 @@ class StudentRepository(BaseRepository):
         logger.trace("All parent links removed for student id=%s", student_id)
 
     def get_parent_ids(self, student_id: int) -> list[int]:
-        """Get all parent IDs for a student."""
-        logger.trace("Fetching parent IDs for student id=%s", student_id)
+        """Get all parent user IDs for a student."""
+        logger.trace("Fetching parent user IDs for student id=%s", student_id)
         self.cursor.execute(
-            """SELECT sp.parent_id FROM student_parents sp
-               JOIN parents p ON sp.parent_id = p.parent_id
-               WHERE sp.student_id = ? AND p.is_deleted = 0""",
+            """SELECT sp.user_id FROM student_parents sp
+               JOIN users u ON sp.user_id = u.user_id
+               WHERE sp.student_id = ? AND u.is_deleted = 0""",
             (student_id,),
         )
-        parent_ids = [row["parent_id"] for row in self.cursor.fetchall()]
-        logger.trace("Parent IDs for student id=%s: %s", student_id, parent_ids)
+        parent_ids = [row["user_id"] for row in self.cursor.fetchall()]
+        logger.trace("Parent user IDs for student id=%s: %s", student_id, parent_ids)
         return parent_ids
 
     # --- Allergies ---

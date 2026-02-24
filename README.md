@@ -32,24 +32,22 @@ app/
 ├── database/
 │   └── connection.py        # SQLite connection & schema init
 ├── schemas/                 # DTOs / Pydantic models
-│   ├── parent.py            # Parent DTOs (with email/phone validation)
-│   ├── teacher.py           # Teacher DTOs (with email/phone validation)
+│   ├── auth.py              # User DTOs (registration/login)
 │   ├── student.py           # Student, Allergy, HWInfo DTOs
 │   └── class_dto.py         # Class DTOs
 ├── repositories/            # Data access layer
 │   ├── base_repository.py   # Base repository with common operations
-│   ├── parent_repository.py
-│   ├── teacher_repository.py
+│   ├── user_repository.py
 │   ├── student_repository.py
 │   └── class_repository.py
 ├── services/                # Business logic layer
-│   ├── parent_service.py
-│   ├── teacher_service.py
+│   ├── auth_service.py
 │   ├── student_service.py
 │   └── class_service.py
 └── routers/                 # API endpoints (presentation layer)
-    ├── parents.py           # /api/v1/parents
-    ├── teachers.py          # /api/v1/teachers
+    ├── auth.py              # /api/v1/auth
+    ├── parents.py           # /api/v1/parents (user-role listing)
+    ├── teachers.py          # /api/v1/teachers (user-role listing)
     ├── classes.py           # /api/v1/classes
     └── students.py          # /api/v1/students
 ```
@@ -67,26 +65,22 @@ All endpoints are prefixed with `/api/v1`.
 ### Parents (`/api/v1/parents`)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/v1/parents/` | Create a parent |
-| GET | `/api/v1/parents/` | List all parents |
-| GET | `/api/v1/parents/{id}` | Get parent with linked student IDs |
-| PUT | `/api/v1/parents/{id}` | Update a parent |
-| DELETE | `/api/v1/parents/{id}` | Soft delete a parent |
+| GET | `/api/v1/parents/` | List all parents (role-based users) |
+| GET | `/api/v1/parents/{id}` | Get a parent profile (user) |
 
 ### Teachers (`/api/v1/teachers`)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/v1/teachers/` | Create a teacher |
-| GET | `/api/v1/teachers/` | List all teachers |
-| GET | `/api/v1/teachers/{id}` | Get a teacher |
-| PUT | `/api/v1/teachers/{id}` | Update a teacher |
-| DELETE | `/api/v1/teachers/{id}` | Soft delete a teacher |
-| GET | `/api/v1/teachers/{id}/classes` | **View all classes with full student info** |
+| GET | `/api/v1/teachers/` | List all teachers (role-based users) |
+| GET | `/api/v1/teachers/{id}` | Get a teacher profile (user) |
+| GET | `/api/v1/teachers/{id}/classes` | View assigned classes |
+| POST | `/api/v1/teachers/{id}/classes/{class_id}` | Assign a teacher to a class |
+| DELETE | `/api/v1/teachers/{id}/classes/{class_id}` | Unassign a teacher from a class |
 
 ### Classes (`/api/v1/classes`)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/v1/classes/` | Create a class (with teacher IDs) |
+| POST | `/api/v1/classes/` | Create a class |
 | GET | `/api/v1/classes/` | List all classes (with students & teachers) |
 | GET | `/api/v1/classes/{id}` | Get class with all students & teachers |
 | PUT | `/api/v1/classes/{id}` | Update a class |
@@ -113,11 +107,11 @@ All endpoints are prefixed with `/api/v1`.
   "student_id": 1,
   "first_name": "Charlie",
   "last_name": "Smith",
-  "class_id": 1,
+  "class_ids": [1, 2],
   "student_photo": "https://...",
   "date_of_birth": "2021-03-15",
   "created_date": "2025-01-15T10:30:00",
-  "parents": [1, 2],
+  "parents": [10, 11],
   "student_allergies": [
     {
       "allergy_id": 1,
@@ -141,28 +135,17 @@ All endpoints are prefixed with `/api/v1`.
 }
 ```
 
-### Parent DTO
+### User DTO (Teacher/Parent)
 ```json
 {
-  "parent_id": 1,
+  "user_id": 10,
   "first_name": "Alice",
   "last_name": "Smith",
   "email": "alice@example.com",
   "phone": "555-0001",
   "address": "123 Main St",
-  "created_date": "2025-01-15T10:30:00"
-}
-```
-
-### Teacher DTO
-```json
-{
-  "teacher_id": 1,
-  "first_name": "Ms.",
-  "last_name": "Johnson",
-  "email": "johnson@school.com",
-  "phone": "555-1234",
-  "address": "456 School Ave",
+  "role": "PARENT",
+  "school_id": 1,
   "created_date": "2025-01-15T10:30:00"
 }
 ```
@@ -175,7 +158,7 @@ All endpoints are prefixed with `/api/v1`.
   "capacity": 20,
   "created_date": "2025-01-15T10:30:00",
   "students": [ /* full StudentResponse objects */ ],
-  "teachers": [ /* TeacherResponse objects */ ]
+  "teachers": [ /* UserResponse objects */ ]
 }
 ```
 
@@ -196,5 +179,5 @@ All DELETE operations perform soft deletes by setting `is_deleted = 1`. Soft-del
 `GET /api/v1/teachers/{id}/classes` returns all classes assigned to the teacher, with **complete student information** including:
 - Allergies (name, severity, notes)
 - Height/weight history with measurement dates
-- Parent IDs
+- Parent user IDs
 - Student photos

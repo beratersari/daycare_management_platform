@@ -4,9 +4,10 @@ from typing import Optional
 
 from app.logger import get_logger
 from app.repositories.student_repository import StudentRepository
-from app.repositories.parent_repository import ParentRepository
 from app.repositories.class_repository import ClassRepository
 from app.repositories.school_repository import SchoolRepository
+from app.repositories.user_repository import UserRepository
+from app.schemas.auth import UserRole
 from app.schemas.student import (
     AllergyCreate,
     AllergyResponse,
@@ -26,9 +27,9 @@ class StudentService:
     def __init__(self, db: sqlite3.Connection):
         self.db = db
         self.repo = StudentRepository(db)
-        self.parent_repo = ParentRepository(db)
         self.class_repo = ClassRepository(db)
         self.school_repo = SchoolRepository(db)
+        self.user_repo = UserRepository(db)
         logger.trace("StudentService initialised")
 
     def create(self, data: StudentCreate) -> tuple[Optional[StudentResponse], Optional[str]]:
@@ -59,8 +60,9 @@ class StudentService:
 
         # Validate parent_ids
         for pid in data.parent_ids:
-            if not self.parent_repo.exists(pid):
-                logger.warning("Parent not found during student creation: parent_id=%s", pid)
+            parent = self.user_repo.get_by_id(pid)
+            if not parent or parent.get("role") != UserRole.PARENT.value:
+                logger.warning("Parent not found during student creation: user_id=%s", pid)
                 return None, f"Parent with id {pid} not found"
 
         # Create student
@@ -84,7 +86,7 @@ class StudentService:
         # Link parents
         for pid in data.parent_ids:
             self.repo.link_parent(student_id, pid)
-            logger.debug("Linked parent id=%s to student id=%s", pid, student_id)
+            logger.debug("Linked parent user_id=%s to student id=%s", pid, student_id)
 
         # Add allergies
         for allergy in data.allergies:
@@ -191,13 +193,14 @@ class StudentService:
         # Update parent links if provided
         if "parent_ids" in update_data and update_data["parent_ids"] is not None:
             for pid in update_data["parent_ids"]:
-                if not self.parent_repo.exists(pid):
-                    logger.warning("Parent not found during student update: parent_id=%s", pid)
+                parent = self.user_repo.get_by_id(pid)
+                if not parent or parent.get("role") != UserRole.PARENT.value:
+                    logger.warning("Parent not found during student update: user_id=%s", pid)
                     return None, f"Parent with id {pid} not found"
             self.repo.unlink_all_parents(student_id)
             for pid in update_data["parent_ids"]:
                 self.repo.link_parent(student_id, pid)
-            logger.debug("Updated parent links for student id=%s: %s", student_id, update_data["parent_ids"])
+            logger.debug("Updated parent user links for student id=%s: %s", student_id, update_data["parent_ids"])
 
         # Update allergies if provided (replace all)
         if "allergies" in update_data and update_data["allergies"] is not None:

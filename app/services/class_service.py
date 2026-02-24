@@ -4,11 +4,11 @@ from typing import Optional
 
 from app.logger import get_logger
 from app.repositories.class_repository import ClassRepository
-from app.repositories.teacher_repository import TeacherRepository
 from app.repositories.student_repository import StudentRepository
 from app.repositories.school_repository import SchoolRepository
+from app.repositories.user_repository import UserRepository
 from app.schemas.class_dto import ClassCreate, ClassResponse, ClassUpdate
-from app.schemas.teacher import TeacherResponse
+from app.schemas.auth import UserResponse, UserRole
 from app.schemas.student import AllergyResponse, HWInfoResponse, StudentResponse
 
 logger = get_logger(__name__)
@@ -20,9 +20,9 @@ class ClassService:
     def __init__(self, db: sqlite3.Connection):
         self.db = db
         self.repo = ClassRepository(db)
-        self.teacher_repo = TeacherRepository(db)
         self.student_repo = StudentRepository(db)
         self.school_repo = SchoolRepository(db)
+        self.user_repo = UserRepository(db)
         logger.trace("ClassService initialised")
 
     def create(self, data: ClassCreate) -> tuple[Optional[ClassResponse], Optional[str]]:
@@ -228,8 +228,8 @@ class ClassService:
         
         # Validate recorded_by if provided
         if recorded_by is not None:
-            teacher = self.teacher_repo.get_by_id(recorded_by)
-            if not teacher:
+            teacher = self.user_repo.get_by_id(recorded_by)
+            if not teacher or teacher.get("role") != UserRole.TEACHER.value:
                 logger.warning("Teacher not found for attendance recording: id=%s", recorded_by)
                 return None, "Teacher not found"
         
@@ -293,8 +293,8 @@ class ClassService:
         student_responses = [self._build_student_response(s) for s in students]
 
         # Get teachers
-        teachers = self.teacher_repo.get_by_class_id(class_id)
-        teacher_responses = [TeacherResponse(**t) for t in teachers]
+        teachers = self.user_repo.get_teachers_by_class_id(class_id)
+        teacher_responses = [UserResponse(**t) for t in teachers]
 
         logger.trace("ClassResponse built for id=%s: %d student(s), %d teacher(s)", class_id, len(student_responses), len(teacher_responses))
         return ClassResponse(
