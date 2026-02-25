@@ -143,10 +143,10 @@ class SchoolRepository(BaseRepository):
         return count
 
     def count_active_teachers(self, school_id: int) -> int:
-        """Count active teachers in a school."""
+        """Count active teachers (users with role TEACHER) in a school."""
         logger.trace("Counting active teachers for school id=%s", school_id)
         self.cursor.execute(
-            "SELECT COUNT(*) as count FROM teachers WHERE school_id = ? AND is_deleted = 0",
+            "SELECT COUNT(*) as count FROM users WHERE school_id = ? AND role = 'TEACHER' AND is_deleted = 0",
             (school_id,),
         )
         count = self.cursor.fetchone()["count"]
@@ -154,10 +154,10 @@ class SchoolRepository(BaseRepository):
         return count
 
     def count_active_parents(self, school_id: int) -> int:
-        """Count active parents in a school."""
+        """Count active parents (users with role PARENT) in a school."""
         logger.trace("Counting active parents for school id=%s", school_id)
         self.cursor.execute(
-            "SELECT COUNT(*) as count FROM parents WHERE school_id = ? AND is_deleted = 0",
+            "SELECT COUNT(*) as count FROM users WHERE school_id = ? AND role = 'PARENT' AND is_deleted = 0",
             (school_id,),
         )
         count = self.cursor.fetchone()["count"]
@@ -196,9 +196,9 @@ class SchoolRepository(BaseRepository):
         )
         total_students = self.cursor.fetchone()["count"]
 
-        # Count teachers
+        # Count teachers (users with role TEACHER)
         self.cursor.execute(
-            "SELECT COUNT(*) as count FROM teachers WHERE school_id = ? AND is_deleted = 0",
+            "SELECT COUNT(*) as count FROM users WHERE school_id = ? AND role = 'TEACHER' AND is_deleted = 0",
             (school_id,),
         )
         total_teachers = self.cursor.fetchone()["count"]
@@ -210,9 +210,9 @@ class SchoolRepository(BaseRepository):
         )
         total_classes = self.cursor.fetchone()["count"]
 
-        # Count parents
+        # Count parents (users with role PARENT)
         self.cursor.execute(
-            "SELECT COUNT(*) as count FROM parents WHERE school_id = ? AND is_deleted = 0",
+            "SELECT COUNT(*) as count FROM users WHERE school_id = ? AND role = 'PARENT' AND is_deleted = 0",
             (school_id,),
         )
         total_parents = self.cursor.fetchone()["count"]

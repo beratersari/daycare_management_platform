@@ -8,7 +8,7 @@ from app.logger import get_logger
 from app.repositories.user_repository import UserRepository
 from app.repositories.class_repository import ClassRepository
 from app.services.class_service import ClassService
-from app.schemas.auth import UserResponse, UserRole
+from app.schemas.auth import UserResponse, UserRole, TeacherAssignClassesRequest, TeacherClassesResponse
 from app.schemas.class_dto import ClassResponse
 from app.schemas.pagination import PaginatedResponse
 from app.auth.dependencies import (
@@ -135,6 +135,47 @@ def assign_teacher_to_class(
     check_school_ownership(current_user, teacher.get("school_id"))
     user_repo.assign_teacher_to_class(teacher_id, class_id)
     return None
+
+
+@router.put("/{teacher_id}/classes", response_model=TeacherClassesResponse)
+def assign_teacher_to_multiple_classes(
+    teacher_id: int,
+    request: TeacherAssignClassesRequest,
+    current_user: dict = Depends(require_admin_or_director),
+    user_repo: UserRepository = Depends(get_user_repo),
+    class_repo: ClassRepository = Depends(get_class_repo),
+):
+    """
+    Assign a teacher to multiple classes at once (replaces all current assignments).
+    ADMIN or DIRECTOR only.
+    """
+    logger.info(
+        "PUT /api/v1/teachers/%s/classes — assign teacher to classes %s",
+        teacher_id, request.class_ids,
+    )
+    teacher = user_repo.get_by_id(teacher_id)
+    if not teacher or teacher.get("role") != UserRole.TEACHER.value:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+    check_school_ownership(current_user, teacher.get("school_id"))
+
+    # Validate all class IDs exist
+    for class_id in request.class_ids:
+        if not class_repo.exists(class_id):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Class with id {class_id} not found",
+            )
+
+    # Replace all assignments
+    final_class_ids = user_repo.replace_teacher_classes(teacher_id, request.class_ids)
+    logger.info(
+        "PUT /api/v1/teachers/%s/classes — teacher now assigned to %d class(es)",
+        teacher_id, len(final_class_ids),
+    )
+    return TeacherClassesResponse(
+        teacher_id=teacher_id,
+        class_ids=final_class_ids,
+    )
 
 
 @router.delete("/{teacher_id}/classes/{class_id}", status_code=204)

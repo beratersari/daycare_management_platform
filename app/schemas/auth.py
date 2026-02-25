@@ -83,3 +83,16 @@ class TokenPayload(BaseModel):
     role: UserRole
     school_id: Optional[int] = None
     exp: int
+
+
+class TeacherAssignClassesRequest(BaseModel):
+    """Schema for assigning a teacher to multiple classes at once."""
+    class_ids: list[int] = Field(
+        ..., min_length=1, description="List of class IDs to assign the teacher to"
+    )
+
+
+class TeacherClassesResponse(BaseModel):
+    """Response after assigning a teacher to multiple classes."""
+    teacher_id: int
+    class_ids: list[int] = Field(description="List of class IDs the teacher is now assigned to")

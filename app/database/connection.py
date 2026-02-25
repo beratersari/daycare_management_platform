@@ -199,6 +199,21 @@ def init_db():
             revoked INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS class_events (
+            event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            class_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            photo_url TEXT,
+            event_date TEXT NOT NULL,
+            created_by INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            is_deleted INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
+            FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE CASCADE
+        );
     """)
 
     # Migration: if the students table still has the legacy class_id column,
@@ -336,6 +351,16 @@ def init_db():
                 );
             """)
             logger.info("meal_menus table migrated successfully")
+
+    # Migration: ensure class_events table has event_date column
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='class_events'")
+    if cursor.fetchone():
+        cursor.execute("PRAGMA table_info(class_events)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "event_date" not in columns:
+            logger.info("Adding event_date column to class_events table")
+            cursor.execute("ALTER TABLE class_events ADD COLUMN event_date TEXT")
+            logger.info("event_date column added to class_events table successfully")
 
     conn.commit()
     conn.close()

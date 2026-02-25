@@ -99,14 +99,25 @@ class AuthService:
             logger.warning("Registration failed — email already exists: %s", data.email)
             return None, "Email already registered"
 
-        # Validate school_id for non-ADMIN roles
-        if data.role != UserRole.ADMIN:
+        # Validate school_id.
+        # ADMIN users are system-wide and must not be tied to a school — school_id is
+        # always stored as NULL regardless of what the caller supplies.
+        # All other roles require a valid school_id.
+        if data.role == UserRole.ADMIN:
+            school_id = None
+            if data.school_id is not None:
+                logger.debug(
+                    "Ignoring school_id=%s supplied for ADMIN registration — ADMINs are not school-scoped",
+                    data.school_id,
+                )
+        else:
             if data.school_id is None:
                 logger.warning("Registration failed — school_id required for role %s", data.role.value)
                 return None, f"school_id is required for {data.role.value} role"
             if not self.school_repo.exists(data.school_id):
                 logger.warning("Registration failed — school not found: school_id=%s", data.school_id)
                 return None, "School not found"
+            school_id = data.school_id
 
         # Hash password and create user
         password_hash = _hash_password(data.password)
@@ -116,7 +127,7 @@ class AuthService:
             first_name=data.first_name,
             last_name=data.last_name,
             role=data.role.value,
-            school_id=data.school_id,
+            school_id=school_id,
             phone=data.phone,
             address=data.address,
         )

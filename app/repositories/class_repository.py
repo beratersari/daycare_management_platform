@@ -287,6 +287,74 @@ class ClassRepository(BaseRepository):
         logger.info("Found %d attendance records for class_id=%s on date=%s", len(results), class_id, attendance_date)
         return results
 
+    def bulk_record_attendance(
+        self,
+        class_id: int,
+        attendance_date: str,
+        entries: list[dict],
+        recorded_by: Optional[int] = None,
+    ) -> list[dict]:
+        """
+        Record attendance for multiple students at once.
+        
+        Each entry should have: student_id, status, and optionally notes.
+        Uses INSERT OR REPLACE so existing records for the same
+        (class_id, student_id, attendance_date) are updated.
+        
+        Returns a list of attendance record dicts.
+        """
+        logger.debug(
+            "Bulk recording attendance for class_id=%s on date=%s (%d entries)",
+            class_id, attendance_date, len(entries),
+        )
+        recorded_at = get_current_datetime()
+        results: list[dict] = []
+
+        for entry in entries:
+            student_id = entry["student_id"]
+            status = entry.get("status", "present")
+            notes = entry.get("notes")
+
+            self.cursor.execute(
+                """
+                INSERT INTO attendance (class_id, student_id, attendance_date, status, recorded_by, recorded_at, notes, is_deleted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                ON CONFLICT(class_id, student_id, attendance_date)
+                DO UPDATE SET
+                    status = excluded.status,
+                    recorded_by = excluded.recorded_by,
+                    recorded_at = excluded.recorded_at,
+                    notes = excluded.notes,
+                    is_deleted = 0
+                """,
+                (class_id, student_id, attendance_date, status, recorded_by, recorded_at, notes),
+            )
+
+            # Fetch the attendance_id
+            self.cursor.execute(
+                "SELECT attendance_id FROM attendance WHERE class_id = ? AND student_id = ? AND attendance_date = ?",
+                (class_id, student_id, attendance_date),
+            )
+            attendance_id = self.cursor.fetchone()["attendance_id"]
+
+            results.append({
+                "attendance_id": attendance_id,
+                "class_id": class_id,
+                "student_id": student_id,
+                "attendance_date": attendance_date,
+                "status": status,
+                "recorded_by": recorded_by,
+                "recorded_at": recorded_at,
+                "notes": notes,
+            })
+
+        self.commit()
+        logger.info(
+            "Bulk attendance recorded: %d records for class_id=%s on date=%s",
+            len(results), class_id, attendance_date,
+        )
+        return results
+
     def get_attendance_history(self, class_id: int, start_date: Optional[str] = None, end_date: Optional[str] = None) -> list[dict]:
         """Get attendance history for a class with optional date range."""
         logger.debug("Fetching attendance history for class_id=%s from %s to %s", class_id, start_date, end_date)
@@ -314,3 +382,116 @@ class ClassRepository(BaseRepository):
         results = [dict(row) for row in self.cursor.fetchall()]
         logger.info("Found %d attendance history records for class_id=%s", len(results), class_id)
         return results
+
+    # --- Event methods ---
+
+    def create_event(
+        self,
+        class_id: int,
+        title: str,
+        description: Optional[str],
+        photo_url: Optional[str],
+        event_date: str,
+        created_by: int,
+    ) -> dict:
+        """Create a new class event."""
+        logger.debug("Inserting class event: %s for class_id=%s on date=%s", title, class_id, event_date)
+        now = get_current_datetime()
+        self.cursor.execute(
+            """INSERT INTO class_events
+               (class_id, title, description, photo_url, event_date, created_by, created_at, updated_at, is_deleted)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)""",
+            (class_id, title, description, photo_url, event_date, created_by, now, now),
+        )
+        self.commit()
+        event_id = self.cursor.lastrowid
+        logger.info("Class event created: event_id=%s for class_id=%s", event_id, class_id)
+        return {
+            "event_id": event_id,
+            "class_id": class_id,
+            "title": title,
+            "description": description,
+            "photo_url": photo_url,
+            "event_date": event_date,
+            "created_by": created_by,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+    def get_event_by_id(self, event_id: int) -> Optional[dict]:
+        """Get a class event by ID (excluding soft-deleted)."""
+        logger.trace("SELECT class event by id=%s", event_id)
+        self.cursor.execute(
+            "SELECT * FROM class_events WHERE event_id = ? AND is_deleted = 0",
+            (event_id,),
+        )
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_events_by_class_id(self, class_id: int) -> list[dict]:
+        """Get all events for a class (excluding soft-deleted), ordered by newest first."""
+        logger.debug("Fetching events for class_id=%s", class_id)
+        self.cursor.execute(
+            """SELECT * FROM class_events
+               WHERE class_id = ? AND is_deleted = 0
+               ORDER BY created_at DESC""",
+            (class_id,),
+        )
+        results = [dict(row) for row in self.cursor.fetchall()]
+        logger.info("Retrieved %d event(s) for class_id=%s", len(results), class_id)
+        return results
+
+    def update_event(
+        self,
+        event_id: int,
+        title: Optional[str] = None,
+        description: Optional[str] = None,
+        photo_url: Optional[str] = None,
+        event_date: Optional[str] = None,
+    ) -> Optional[dict]:
+        """Update a class event."""
+        logger.debug("Updating event: id=%s", event_id)
+        existing = self.get_event_by_id(event_id)
+        if not existing:
+            logger.warning("Event not found for update: id=%s", event_id)
+            return None
+
+        # Update only provided fields
+        if title is not None:
+            existing["title"] = title
+        if description is not None:
+            existing["description"] = description
+        if photo_url is not None:
+            existing["photo_url"] = photo_url
+        if event_date is not None:
+            existing["event_date"] = event_date
+
+        now = get_current_datetime()
+        existing["updated_at"] = now
+
+        self.cursor.execute(
+            """UPDATE class_events
+               SET title=?, description=?, photo_url=?, event_date=?, updated_at=?
+               WHERE event_id=? AND is_deleted = 0""",
+            (existing["title"], existing["description"], existing["photo_url"], existing["event_date"], now, event_id),
+        )
+        self.commit()
+        logger.info("Event updated: id=%s", event_id)
+        return existing
+
+    def soft_delete_event(self, event_id: int) -> bool:
+        """Soft delete a class event."""
+        logger.debug("Soft-deleting event: id=%s", event_id)
+        existing = self.get_event_by_id(event_id)
+        if not existing:
+            logger.warning("Event not found for deletion: id=%s", event_id)
+            return False
+
+        now = get_current_datetime()
+        self.cursor.execute(
+            "UPDATE class_events SET is_deleted = 1, updated_at = ? WHERE event_id = ?",
+            (now, event_id),
+        )
+        self.commit()
+        logger.info("Event soft-deleted: id=%s", event_id)
+        return True

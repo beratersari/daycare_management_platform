@@ -63,28 +63,24 @@ def list_schools(
     return []
 
 
-@router.get("/{school_id}", response_model=SchoolResponse)
+@router.get("/{school_id}", response_model=SchoolWithStats)
 def get_school(
     school_id: int, 
     include_stats: bool = Query(False, description="Include school statistics"),
     current_user: dict = Depends(get_current_user),
     service: SchoolService = Depends(get_service),
 ):
-    """Get a school by ID. Users can only view their own school."""
+    """Get a school by ID. Pass include_stats=true to include student/teacher/class/parent counts."""
     logger.info("GET /api/v1/schools/%s — get school request (include_stats=%s)", school_id, include_stats)
     check_school_ownership(current_user, school_id)
     if include_stats:
         result = service.get_by_id_with_stats(school_id)
-        if not result:
-            logger.warning("GET /api/v1/schools/%s — 404 not found", school_id)
-            raise HTTPException(status_code=404, detail="School not found")
-        return result
     else:
         result = service.get_by_id(school_id)
-        if not result:
-            logger.warning("GET /api/v1/schools/%s — 404 not found", school_id)
-            raise HTTPException(status_code=404, detail="School not found")
-        return result
+    if not result:
+        logger.warning("GET /api/v1/schools/%s — 404 not found", school_id)
+        raise HTTPException(status_code=404, detail="School not found")
+    return result
 
 
 @router.get("/{school_id}/stats", response_model=SchoolWithStats)

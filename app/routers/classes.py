@@ -13,6 +13,11 @@ from app.schemas.class_dto import (
     ClassUpdate,
     AttendanceRecord,
     AttendanceRecordResponse,
+    BulkAttendanceRequest,
+    BulkAttendanceResponse,
+    ClassEventCreate,
+    ClassEventUpdate,
+    ClassEventResponse,
 )
 from app.schemas.pagination import PaginatedResponse
 from app.schemas.student import StudentResponse
@@ -228,19 +233,21 @@ def record_attendance(
     class_id: int,
     attendance_record: AttendanceRecord,
     attendance_date: str = Query(..., description="Date in YYYY-MM-DD format"),
-    recorded_by: Optional[int] = Query(None, description="ID of the teacher recording attendance"),
     current_user: dict = Depends(require_admin_director_or_teacher),
     service: ClassService = Depends(get_service),
 ):
     """
     Record attendance for a student on a specific date.
     ADMIN, DIRECTOR, or TEACHER (must be assigned to the class).
+    The recording user is automatically captured from the authenticated session.
     """
+    recorded_by = current_user.get("sub")
     logger.info(
-        "POST /api/v1/classes/%s/attendance — record attendance for student_id=%s on date=%s",
+        "POST /api/v1/classes/%s/attendance — record attendance for student_id=%s on date=%s by user_id=%s",
         class_id,
         attendance_record.student_id,
         attendance_date,
+        recorded_by,
     )
     
     _check_teacher_class_access(current_user, class_id, service)
@@ -276,6 +283,76 @@ def record_attendance(
         recorded_by=result["recorded_by"],
         recorded_at=result["recorded_at"],
         notes=result["notes"],
+    )
+
+
+@router.put("/{class_id}/attendance/bulk", response_model=BulkAttendanceResponse)
+def bulk_set_attendance(
+    class_id: int,
+    bulk_request: BulkAttendanceRequest,
+    current_user: dict = Depends(require_admin_director_or_teacher),
+    service: ClassService = Depends(get_service),
+):
+    """
+    Set attendance for a list of students at once (bulk edit).
+    Creates or updates attendance records for each student in the list.
+    ADMIN, DIRECTOR, or TEACHER (must be assigned to the class).
+    The recording user is automatically captured from the authenticated session.
+    """
+    recorded_by = current_user.get("sub")
+    logger.info(
+        "PUT /api/v1/classes/%s/attendance/bulk — bulk set attendance for %d students on date=%s by user_id=%s",
+        class_id,
+        len(bulk_request.records),
+        bulk_request.attendance_date,
+        recorded_by,
+    )
+
+    _check_teacher_class_access(current_user, class_id, service)
+
+    entries = [entry.model_dump() for entry in bulk_request.records]
+    results, error = service.bulk_record_attendance(
+        class_id=class_id,
+        attendance_date=bulk_request.attendance_date,
+        entries=entries,
+        recorded_by=recorded_by,
+    )
+
+    if error:
+        if "not found" in error.lower():
+            logger.warning("PUT /api/v1/classes/%s/attendance/bulk — 404: %s", class_id, error)
+            raise HTTPException(status_code=404, detail=error)
+        logger.warning("PUT /api/v1/classes/%s/attendance/bulk — 400: %s", class_id, error)
+        raise HTTPException(status_code=400, detail=error)
+
+    # Build response records with student names
+    response_records = []
+    for record in results:
+        student = service.student_repo.get_by_id(record["student_id"])
+        student_name = f"{student['first_name']} {student['last_name']}" if student else None
+        response_records.append(
+            AttendanceRecordResponse(
+                attendance_id=record["attendance_id"],
+                class_id=record["class_id"],
+                student_id=record["student_id"],
+                student_name=student_name,
+                attendance_date=record["attendance_date"],
+                status=record["status"],
+                recorded_by=record["recorded_by"],
+                recorded_at=record["recorded_at"],
+                notes=record["notes"],
+            )
+        )
+
+    logger.info(
+        "PUT /api/v1/classes/%s/attendance/bulk — %d records set successfully",
+        class_id, len(response_records),
+    )
+    return BulkAttendanceResponse(
+        class_id=class_id,
+        attendance_date=bulk_request.attendance_date,
+        total_recorded=len(response_records),
+        records=response_records,
     )
 
 
@@ -363,3 +440,182 @@ def get_attendance_history(
     
     logger.info("GET /api/v1/classes/%s/attendance/history — returning %d records", class_id, len(response_records))
     return response_records
+
+
+# --- Event endpoints ---
+
+
+@router.post("/{class_id}/events", response_model=ClassEventResponse, status_code=201)
+def create_class_event(
+    class_id: int,
+    event_data: ClassEventCreate,
+    current_user: dict = Depends(require_admin_director_or_teacher),
+    service: ClassService = Depends(get_service),
+):
+    """
+    Create a new event for a class.
+    ADMIN, DIRECTOR, or TEACHER (must be assigned to the class).
+    """
+    created_by = current_user.get("sub")
+    logger.info(
+        "POST /api/v1/classes/%s/events — create event by user_id=%s",
+        class_id,
+        created_by,
+    )
+    
+    _check_teacher_class_access(current_user, class_id, service)
+    
+    result, error = service.create_event(
+        class_id=class_id,
+        data=event_data,
+        created_by=created_by,
+    )
+    
+    if error:
+        if "not found" in error.lower():
+            logger.warning("POST /api/v1/classes/%s/events — 404: %s", class_id, error)
+            raise HTTPException(status_code=404, detail=error)
+        logger.warning("POST /api/v1/classes/%s/events — 400: %s", class_id, error)
+        raise HTTPException(status_code=400, detail=error)
+    
+    logger.info("POST /api/v1/classes/%s/events — event created: event_id=%s", class_id, result.event_id)
+    return result
+
+
+@router.get("/{class_id}/events", response_model=list[ClassEventResponse])
+def get_class_events(
+    class_id: int,
+    current_user: dict = Depends(get_current_user),
+    service: ClassService = Depends(get_service),
+):
+    """
+    Get all events for a class.
+    All authenticated users can view events for classes they have access to.
+    PARENT can only view events for classes their children are enrolled in.
+    """
+    logger.info("GET /api/v1/classes/%s/events — get events request", class_id)
+    
+    # Parents can only see events for classes their children are enrolled in
+    if current_user.get("role") == UserRole.PARENT.value:
+        _check_parent_class_access(current_user, class_id, service)
+    
+    events, error = service.get_events_by_class_id(class_id)
+    
+    if error:
+        if "not found" in error.lower():
+            logger.warning("GET /api/v1/classes/%s/events — 404: %s", class_id, error)
+            raise HTTPException(status_code=404, detail=error)
+        logger.warning("GET /api/v1/classes/%s/events — 400: %s", class_id, error)
+        raise HTTPException(status_code=400, detail=error)
+    
+    logger.info("GET /api/v1/classes/%s/events — returning %d events", class_id, len(events))
+    return events
+
+
+@router.get("/{class_id}/events/{event_id}", response_model=ClassEventResponse)
+def get_class_event_by_id(
+    class_id: int,
+    event_id: int,
+    current_user: dict = Depends(get_current_user),
+    service: ClassService = Depends(get_service),
+):
+    """
+    Get a specific event by ID.
+    All authenticated users can view events for classes they have access to.
+    PARENT can only view events for classes their children are enrolled in.
+    """
+    logger.info("GET /api/v1/classes/%s/events/%s — get event request", class_id, event_id)
+    
+    # Parents can only see events for classes their children are enrolled in
+    if current_user.get("role") == UserRole.PARENT.value:
+        _check_parent_class_access(current_user, class_id, service)
+    
+    result, error = service.get_event_by_id(class_id, event_id)
+    
+    if error:
+        if "not found" in error.lower():
+            logger.warning("GET /api/v1/classes/%s/events/%s — 404: %s", class_id, event_id, error)
+            raise HTTPException(status_code=404, detail=error)
+        logger.warning("GET /api/v1/classes/%s/events/%s — 400: %s", class_id, event_id, error)
+        raise HTTPException(status_code=400, detail=error)
+    
+    logger.info("GET /api/v1/classes/%s/events/%s — event found", class_id, event_id)
+    return result
+
+
+@router.put("/{class_id}/events/{event_id}", response_model=ClassEventResponse)
+def update_class_event(
+    class_id: int,
+    event_id: int,
+    event_data: ClassEventUpdate,
+    current_user: dict = Depends(require_admin_director_or_teacher),
+    service: ClassService = Depends(get_service),
+):
+    """
+    Update a class event.
+    ADMIN, DIRECTOR, or TEACHER (must be assigned to the class).
+    """
+    updated_by = current_user.get("sub")
+    logger.info(
+        "PUT /api/v1/classes/%s/events/%s — update event by user_id=%s",
+        class_id,
+        event_id,
+        updated_by,
+    )
+    
+    _check_teacher_class_access(current_user, class_id, service)
+    
+    result, error = service.update_event(
+        class_id=class_id,
+        event_id=event_id,
+        data=event_data,
+        updated_by=updated_by,
+    )
+    
+    if error:
+        if "not found" in error.lower():
+            logger.warning("PUT /api/v1/classes/%s/events/%s — 404: %s", class_id, event_id, error)
+            raise HTTPException(status_code=404, detail=error)
+        logger.warning("PUT /api/v1/classes/%s/events/%s — 400: %s", class_id, event_id, error)
+        raise HTTPException(status_code=400, detail=error)
+    
+    logger.info("PUT /api/v1/classes/%s/events/%s — event updated", class_id, event_id)
+    return result
+
+
+@router.delete("/{class_id}/events/{event_id}", status_code=204)
+def delete_class_event(
+    class_id: int,
+    event_id: int,
+    current_user: dict = Depends(require_admin_director_or_teacher),
+    service: ClassService = Depends(get_service),
+):
+    """
+    Delete (soft delete) a class event.
+    ADMIN, DIRECTOR, or TEACHER (must be assigned to the class).
+    """
+    deleted_by = current_user.get("sub")
+    logger.info(
+        "DELETE /api/v1/classes/%s/events/%s — delete event by user_id=%s",
+        class_id,
+        event_id,
+        deleted_by,
+    )
+    
+    _check_teacher_class_access(current_user, class_id, service)
+    
+    success, error = service.delete_event(
+        class_id=class_id,
+        event_id=event_id,
+        deleted_by=deleted_by,
+    )
+    
+    if not success:
+        if "not found" in error.lower():
+            logger.warning("DELETE /api/v1/classes/%s/events/%s — 404: %s", class_id, event_id, error)
+            raise HTTPException(status_code=404, detail=error)
+        logger.warning("DELETE /api/v1/classes/%s/events/%s — 400: %s", class_id, event_id, error)
+        raise HTTPException(status_code=400, detail=error)
+    
+    logger.info("DELETE /api/v1/classes/%s/events/%s — event deleted", class_id, event_id)
+    return None

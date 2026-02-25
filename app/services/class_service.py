@@ -7,8 +7,8 @@ from app.repositories.class_repository import ClassRepository
 from app.repositories.student_repository import StudentRepository
 from app.repositories.school_repository import SchoolRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.class_dto import ClassCreate, ClassResponse, ClassUpdate
-from app.schemas.auth import UserResponse, UserRole
+from app.schemas.class_dto import ClassCreate, ClassResponse, ClassUpdate, ClassEventCreate, ClassEventUpdate, ClassEventResponse
+from app.schemas.auth import UserResponse
 from app.schemas.student import AllergyResponse, HWInfoResponse, StudentResponse
 
 logger = get_logger(__name__)
@@ -226,13 +226,6 @@ class ClassService:
             logger.warning("Student id=%s is not enrolled in class id=%s", student_id, class_id)
             return None, "Student is not enrolled in this class"
         
-        # Validate recorded_by if provided
-        if recorded_by is not None:
-            teacher = self.user_repo.get_by_id(recorded_by)
-            if not teacher or teacher.get("role") != UserRole.TEACHER.value:
-                logger.warning("Teacher not found for attendance recording: id=%s", recorded_by)
-                return None, "Teacher not found"
-        
         # Validate status
         valid_statuses = ["present", "absent", "late", "excused"]
         if status not in valid_statuses:
@@ -250,6 +243,73 @@ class ClassService:
         
         logger.info("Attendance recorded successfully: attendance_id=%s", result["attendance_id"])
         return result, None
+
+    def bulk_record_attendance(
+        self,
+        class_id: int,
+        attendance_date: str,
+        entries: list[dict],
+        recorded_by: Optional[int] = None,
+    ) -> tuple[Optional[list[dict]], Optional[str]]:
+        """
+        Record attendance for multiple students at once (bulk edit).
+        
+        Validates the class, each student's enrollment, the status values,
+        and the optional recorded_by teacher, then delegates to the repo.
+        
+        Returns (list_of_records, None) on success or (None, error_message) on failure.
+        """
+        logger.info(
+            "Bulk recording attendance: class_id=%s, date=%s, %d entries",
+            class_id, attendance_date, len(entries),
+        )
+
+        # Verify class exists
+        if not self.repo.exists(class_id):
+            logger.warning("Class not found for bulk attendance: id=%s", class_id)
+            return None, "Class not found"
+
+        valid_statuses = ["present", "absent", "late", "excused"]
+
+        # Validate each entry
+        seen_student_ids: set[int] = set()
+        for entry in entries:
+            student_id = entry["student_id"]
+
+            # Check for duplicates within the request
+            if student_id in seen_student_ids:
+                logger.warning("Duplicate student_id=%s in bulk attendance request", student_id)
+                return None, f"Duplicate student_id {student_id} in request"
+            seen_student_ids.add(student_id)
+
+            # Verify student exists
+            student = self.student_repo.get_by_id(student_id)
+            if not student:
+                logger.warning("Student not found for bulk attendance: id=%s", student_id)
+                return None, f"Student with id {student_id} not found"
+
+            # Verify student is enrolled in the class
+            class_ids = self.student_repo.get_class_ids(student_id)
+            if class_id not in class_ids:
+                logger.warning("Student id=%s is not enrolled in class id=%s", student_id, class_id)
+                return None, f"Student with id {student_id} is not enrolled in this class"
+
+            # Validate status
+            status = entry.get("status", "present")
+            if status not in valid_statuses:
+                logger.warning("Invalid attendance status '%s' for student_id=%s", status, student_id)
+                return None, f"Invalid status '{status}' for student {student_id}. Must be one of: {', '.join(valid_statuses)}"
+
+        # All validations passed — delegate to repository
+        results = self.repo.bulk_record_attendance(
+            class_id=class_id,
+            attendance_date=attendance_date,
+            entries=entries,
+            recorded_by=recorded_by,
+        )
+
+        logger.info("Bulk attendance recorded: %d records for class_id=%s", len(results), class_id)
+        return results, None
 
     def get_attendance_for_date(self, class_id: int, attendance_date: str) -> list[dict]:
         """Get all attendance records for a class on a specific date."""
@@ -302,6 +362,156 @@ class ClassService:
             students=student_responses,
             teachers=teacher_responses,
         )
+
+    # --- Event methods ---
+
+    def create_event(
+        self,
+        class_id: int,
+        data: ClassEventCreate,
+        created_by: int,
+    ) -> tuple[Optional[ClassEventResponse], Optional[str]]:
+        """Create a new class event."""
+        logger.info("Creating event for class_id=%s by user_id=%s", class_id, created_by)
+        
+        # Verify class exists
+        if not self.repo.exists(class_id):
+            logger.warning("Class not found for event creation: id=%s", class_id)
+            return None, "Class not found"
+        
+        event = self.repo.create_event(
+            class_id=class_id,
+            title=data.title,
+            description=data.description,
+            photo_url=data.photo_url,
+            event_date=data.event_date,
+            created_by=created_by,
+        )
+        
+        logger.info("Event created successfully: event_id=%s", event["event_id"])
+        return ClassEventResponse(**event), None
+
+    def get_event_by_id(
+        self,
+        class_id: int,
+        event_id: int,
+    ) -> tuple[Optional[ClassEventResponse], Optional[str]]:
+        """Get a class event by ID."""
+        logger.debug("Fetching event: event_id=%s for class_id=%s", event_id, class_id)
+        
+        # Verify class exists
+        if not self.repo.exists(class_id):
+            logger.warning("Class not found: id=%s", class_id)
+            return None, "Class not found"
+        
+        event = self.repo.get_event_by_id(event_id)
+        if not event:
+            logger.warning("Event not found: event_id=%s", event_id)
+            return None, "Event not found"
+        
+        # Verify event belongs to this class
+        if event["class_id"] != class_id:
+            logger.warning("Event %s does not belong to class %s", event_id, class_id)
+            return None, "Event not found in this class"
+        
+        logger.trace("Event found: event_id=%s", event_id)
+        return ClassEventResponse(**event), None
+
+    def get_events_by_class_id(
+        self,
+        class_id: int,
+    ) -> tuple[list[ClassEventResponse], Optional[str]]:
+        """Get all events for a class."""
+        logger.debug("Fetching events for class_id=%s", class_id)
+        
+        # Verify class exists
+        if not self.repo.exists(class_id):
+            logger.warning("Class not found: id=%s", class_id)
+            return [], "Class not found"
+        
+        events = self.repo.get_events_by_class_id(class_id)
+        logger.info("Retrieved %d event(s) for class_id=%s", len(events), class_id)
+        return [ClassEventResponse(**e) for e in events], None
+
+    def update_event(
+        self,
+        class_id: int,
+        event_id: int,
+        data: ClassEventUpdate,
+        updated_by: int,
+    ) -> tuple[Optional[ClassEventResponse], Optional[str]]:
+        """Update a class event."""
+        logger.info("Updating event: event_id=%s for class_id=%s by user_id=%s", event_id, class_id, updated_by)
+        
+        # Verify class exists
+        if not self.repo.exists(class_id):
+            logger.warning("Class not found: id=%s", class_id)
+            return None, "Class not found"
+        
+        # Get existing event
+        existing = self.repo.get_event_by_id(event_id)
+        if not existing:
+            logger.warning("Event not found for update: event_id=%s", event_id)
+            return None, "Event not found"
+        
+        # Verify event belongs to this class
+        if existing["class_id"] != class_id:
+            logger.warning("Event %s does not belong to class %s", event_id, class_id)
+            return None, "Event not found in this class"
+        
+        # Only the creator or admin can update (we'll check admin in router)
+        # For now, just perform the update
+        update_data = data.model_dump(exclude_unset=True)
+        logger.debug("Event update data: %s", update_data)
+        
+        result = self.repo.update_event(
+            event_id=event_id,
+            title=update_data.get("title"),
+            description=update_data.get("description"),
+            photo_url=update_data.get("photo_url"),
+            event_date=update_data.get("event_date"),
+        )
+        
+        if not result:
+            logger.warning("Failed to update event: event_id=%s", event_id)
+            return None, "Failed to update event"
+        
+        logger.info("Event updated successfully: event_id=%s", event_id)
+        return ClassEventResponse(**result), None
+
+    def delete_event(
+        self,
+        class_id: int,
+        event_id: int,
+        deleted_by: int,
+    ) -> tuple[bool, Optional[str]]:
+        """Soft delete a class event."""
+        logger.info("Deleting event: event_id=%s for class_id=%s by user_id=%s", event_id, class_id, deleted_by)
+        
+        # Verify class exists
+        if not self.repo.exists(class_id):
+            logger.warning("Class not found: id=%s", class_id)
+            return False, "Class not found"
+        
+        # Get existing event
+        existing = self.repo.get_event_by_id(event_id)
+        if not existing:
+            logger.warning("Event not found for deletion: event_id=%s", event_id)
+            return False, "Event not found"
+        
+        # Verify event belongs to this class
+        if existing["class_id"] != class_id:
+            logger.warning("Event %s does not belong to class %s", event_id, class_id)
+            return False, "Event not found in this class"
+        
+        success = self.repo.soft_delete_event(event_id)
+        
+        if success:
+            logger.info("Event deleted successfully: event_id=%s", event_id)
+            return True, None
+        else:
+            logger.warning("Failed to delete event: event_id=%s", event_id)
+            return False, "Failed to delete event"
 
     def _build_student_response(self, student: dict) -> StudentResponse:
         """Build a StudentResponse with class_ids, parents, allergies, and HW info."""

@@ -184,6 +184,29 @@ class UserRepository(BaseRepository):
         logger.trace("Class IDs for teacher user_id=%s: %s", user_id, class_ids)
         return class_ids
 
+    def replace_teacher_classes(self, user_id: int, class_ids: list[int]) -> list[int]:
+        """
+        Replace all class assignments for a teacher with the given list.
+        
+        Removes existing assignments and inserts the new ones.
+        Returns the final list of class_ids assigned.
+        """
+        logger.debug("Replacing class assignments for teacher user_id=%s with class_ids=%s", user_id, class_ids)
+        # Remove all existing assignments
+        self.cursor.execute(
+            "DELETE FROM teacher_classes WHERE user_id = ?",
+            (user_id,),
+        )
+        # Insert new assignments
+        for class_id in class_ids:
+            self.cursor.execute(
+                "INSERT OR IGNORE INTO teacher_classes (user_id, class_id) VALUES (?, ?)",
+                (user_id, class_id),
+            )
+        self.commit()
+        logger.info("Teacher user_id=%s now assigned to %d class(es): %s", user_id, len(class_ids), class_ids)
+        return class_ids
+
     def get_teachers_by_class_id(self, class_id: int) -> list[dict]:
         """Get teacher users assigned to a class."""
         logger.trace("Fetching teacher users for class_id=%s", class_id)
