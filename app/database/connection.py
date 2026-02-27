@@ -5,7 +5,7 @@ from app.logger import get_logger
 
 logger = get_logger(__name__)
 
-DB_PATH = "/testbed/db/kinder_tracker.db"
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "kinder_tracker.db")
 
 
 def get_connection() -> sqlite3.Connection:
@@ -365,3 +365,89 @@ def init_db():
     conn.commit()
     conn.close()
     logger.info("Database schema initialised successfully")
+
+
+def create_mock_data():
+    """Create mock users and a school for development/testing."""
+    from datetime import datetime
+    import bcrypt
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Check if mock data already exists
+    cursor.execute("SELECT COUNT(*) FROM users WHERE email LIKE '%@example.com'")
+    if cursor.fetchone()[0] > 0:
+        logger.info("Mock data already exists, skipping creation")
+        conn.close()
+        return
+
+    logger.info("Creating mock data...")
+
+    now = datetime.now().isoformat()
+
+    # Create a mock school
+    cursor.execute("""
+        INSERT INTO schools (school_name, address, phone, email, director_name, license_number, capacity, created_date, is_deleted)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+    """, ("Sunshine Daycare Center", "123 Learning Lane, Education City", "555-123-4567",
+          "director@sunshine.edu", "Jane Smith", "DC-2024-001", 50, now))
+    school_id = cursor.lastrowid
+    logger.info(f"Created mock school: Sunshine Daycare Center (ID: {school_id})")
+
+    # Mock users with different roles
+    mock_users = [
+        {
+            "email": "admin@example.com",
+            "password": "admin123",
+            "first_name": "System",
+            "last_name": "Administrator",
+            "role": "ADMIN",
+            "phone": "555-000-0001",
+            "address": "1 Admin Plaza, System City"
+        },
+        {
+            "email": "director@example.com",
+            "password": "director123",
+            "first_name": "Sarah",
+            "last_name": "Johnson",
+            "role": "DIRECTOR",
+            "phone": "555-000-0002",
+            "address": "42 Director Drive, Management Town"
+        },
+        {
+            "email": "teacher@example.com",
+            "password": "teacher123",
+            "first_name": "Emily",
+            "last_name": "Davis",
+            "role": "TEACHER",
+            "phone": "555-000-0003",
+            "address": "101 Teacher Terrace, Classroom City"
+        },
+        {
+            "email": "parent@example.com",
+            "password": "parent123",
+            "first_name": "Michael",
+            "last_name": "Brown",
+            "role": "PARENT",
+            "phone": "555-000-0004",
+            "address": "789 Family Lane, Parentville"
+        },
+    ]
+
+    for user in mock_users:
+        # Hash password
+        password_hash = bcrypt.hashpw(user["password"].encode(), bcrypt.gensalt()).decode()
+
+        cursor.execute("""
+            INSERT INTO users (email, password_hash, first_name, last_name, role, school_id, phone, address, created_date, is_deleted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        """, (user["email"], password_hash, user["first_name"], user["last_name"],
+              user["role"], school_id if user["role"] != "ADMIN" else None,
+              user["phone"], user["address"], now))
+
+        logger.info(f"Created mock user: {user['email']} ({user['role']}) - Password: {user['password']}")
+
+    conn.commit()
+    conn.close()
+    logger.info("Mock data created successfully")

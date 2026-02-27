@@ -13,16 +13,29 @@ A FastAPI backend for managing daycare centers and preschools. Track students, p
 ## Quick Start
 
 ```bash
-pip install fastapi uvicorn pydantic
+pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
 The API will be available at `http://localhost:8000`.  
 Interactive docs at `http://localhost:8000/docs`.
 
+## Mock Users (Development)
+
+The following mock users are automatically created when the server starts for the first time:
+
+| Email | Password | Role | Name |
+|-------|----------|------|------|
+| `admin@example.com` | `admin123` | ADMIN | System Administrator |
+| `director@example.com` | `director123` | DIRECTOR | Sarah Johnson |
+| `teacher@example.com` | `teacher123` | TEACHER | Emily Davis |
+| `parent@example.com` | `parent123` | PARENT | Michael Brown |
+
+Use these credentials to log in via the mobile app or API.
+
 ## Database
 
-SQLite database is automatically initialized at `/testbed/db/kinder_tracker.db` on first startup.
+SQLite database is automatically initialized at `kinder_tracker.db` in the project root on first startup.
 
 ## Project Structure (N-Layered Architecture)
 
@@ -55,6 +68,48 @@ app/
 ## API Endpoints
 
 All endpoints are prefixed with `/api/v1`.
+
+### Authentication (`/api/v1/auth`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/auth/register` | Create a new user account |
+| POST | `/api/v1/auth/login` | Authenticate and receive tokens |
+| POST | `/api/v1/auth/refresh` | Exchange refresh token for new pair |
+| POST | `/api/v1/auth/logout` | Revoke all tokens (requires auth) |
+| GET | `/api/v1/auth/me` | Get current user profile (requires auth) |
+
+**Registration Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "securepass123",
+  "first_name": "John",
+  "last_name": "Doe",
+  "role": "PARENT",
+  "school_id": null,
+  "phone": "555-123-4567",
+  "address": "123 Main St"
+}
+```
+
+**Login Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "securepass123"
+}
+```
+
+**Token Response:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2g...",
+  "token_type": "bearer",
+  "expires_in": 900
+}
+```
 
 ### Health
 | Method | Endpoint | Description |

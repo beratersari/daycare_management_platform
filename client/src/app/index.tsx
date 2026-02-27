@@ -1,98 +1,141 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+/**
+ * Login Screen (index route)
+ *
+ * Integrates RTK Query's useLoginMutation with the Redux auth slice.
+ * Handles loading, success (redirect to dashboard), and error states.
+ */
+import { useRouter } from 'expo-router';
+import React, { useEffect } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { AppText } from '@/components/atoms/AppText';
+import { Logo } from '@/components/atoms/Logo';
+import { LoginForm, type LoginFormValues } from '@/components/organisms/LoginForm';
+import { AuthTemplate } from '@/components/templates/AuthTemplate';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { useLoginMutation } from '@/store/api/authApi';
+import {
+  selectIsAuthenticated,
+  selectIsHydrating,
+  setCredentials,
+} from '@/store/authSlice';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+export default function LoginScreen() {
+  const router = useRouter();
+  const dispatch = useAppDispatch();
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const isHydrating = useAppSelector(selectIsHydrating);
+
+  const [login, { isLoading, error, reset }] = useLoginMutation();
+
+  // Redirect to dashboard once authenticated
+  useEffect(() => {
+    if (!isHydrating && isAuthenticated) {
+      router.replace('/dashboard');
+    }
+  }, [isAuthenticated, isHydrating, router]);
+
+  const handleSubmit = async (values: LoginFormValues) => {
+    reset(); // clear any previous error
+    try {
+      const tokens = await login(values).unwrap();
+      dispatch(setCredentials({ tokens }));
+      // Navigation happens via the useEffect above
+    } catch {
+      // error is captured by RTK Query — rendered below
+    }
+  };
+
+  const navigateToRegister = () => {
+    router.push('/register');
+  };
+
+  /** Extract a human-readable error message from the RTK Query error */
+  const errorMessage = (() => {
+    if (!error) return null;
+    if ('status' in error) {
+      if (error.status === 401) return 'Invalid email or password. Please try again.';
+      if (error.status === 422) return 'Please check your email and password format.';
+      if (error.status === 0 || error.status === 'FETCH_ERROR')
+        return 'Cannot reach the server. Check your connection.';
+      const data = error.data as { detail?: string } | undefined;
+      if (data?.detail) return data.detail;
+      return `Server error (${error.status}). Please try again.`;
+    }
+    return 'An unexpected error occurred. Please try again.';
+  })();
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+    <AuthTemplate>
+      {/* Hero section */}
+      <View style={styles.hero}>
+        <Logo />
+        <View style={styles.tagline}>
+          <AppText variant="body" style={styles.taglineText}>
+            Sign in to manage your daycare
+          </AppText>
+        </View>
+      </View>
 
-export default function HomeScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+      {/* Form card */}
+      <View style={styles.card}>
+        <AppText variant="heading" style={styles.cardTitle}>
+          Welcome back
+        </AppText>
+        <AppText variant="body" color="#6B7280" style={styles.cardSubtitle}>
+          Enter your credentials to continue
+        </AppText>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+        <LoginForm
+          onSubmit={handleSubmit}
+          isLoading={isLoading}
+          errorMessage={errorMessage}
+        />
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+        <View style={styles.footer}>
+          <AppText variant="body" color="#6B7280">
+            Don't have an account?{' '}
+          </AppText>
+          <Pressable onPress={navigateToRegister}>
+            <AppText variant="body" color="#208AEF" style={styles.link}>
+              Create one
+            </AppText>
+          </Pressable>
+        </View>
+      </View>
+    </AuthTemplate>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
+  hero: {
     alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+    gap: 12,
   },
-  heroSection: {
+  tagline: {
     alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
   },
-  title: {
+  taglineText: {
+    textAlign: 'center',
+    color: '#6B7280',
+  },
+  card: {
+    alignSelf: 'stretch',
+    gap: 12,
+  },
+  cardTitle: {
     textAlign: 'center',
   },
-  code: {
-    textTransform: 'uppercase',
+  cardSubtitle: {
+    textAlign: 'center',
+    marginBottom: 4,
   },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  link: {
+    fontWeight: '600',
   },
 });
