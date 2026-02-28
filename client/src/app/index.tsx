@@ -19,12 +19,15 @@ import {
   selectIsHydrating,
   setCredentials,
 } from '@/store/authSlice';
+import { useLocalization } from '@/hooks/use-localization';
+import { BrandColors } from '@/constants/theme';
 
 export default function LoginScreen() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const isHydrating = useAppSelector(selectIsHydrating);
+  const { t } = useLocalization();
 
   const [login, { isLoading, error, reset }] = useLoginMutation();
 
@@ -54,15 +57,15 @@ export default function LoginScreen() {
   const errorMessage = (() => {
     if (!error) return null;
     if ('status' in error) {
-      if (error.status === 401) return 'Invalid email or password. Please try again.';
-      if (error.status === 422) return 'Please check your email and password format.';
+      if (error.status === 401) return t('auth.invalidCredentials');
+      if (error.status === 422) return t('auth.checkFormat');
       if (error.status === 0 || error.status === 'FETCH_ERROR')
-        return 'Cannot reach the server. Check your connection.';
+        return t('auth.cannotReachServer');
       const data = error.data as { detail?: string } | undefined;
       if (data?.detail) return data.detail;
-      return `Server error (${error.status}). Please try again.`;
+      return `${t('auth.serverError')} (${error.status})`;
     }
-    return 'An unexpected error occurred. Please try again.';
+    return t('common.error');
   })();
 
   return (
@@ -72,7 +75,7 @@ export default function LoginScreen() {
         <Logo />
         <View style={styles.tagline}>
           <AppText variant="body" style={styles.taglineText}>
-            Sign in to manage your daycare
+            {t('auth.signInToManage')}
           </AppText>
         </View>
       </View>
@@ -80,10 +83,10 @@ export default function LoginScreen() {
       {/* Form card */}
       <View style={styles.card}>
         <AppText variant="heading" style={styles.cardTitle}>
-          Welcome back
+          {t('auth.welcomeBack')}
         </AppText>
         <AppText variant="body" color="#6B7280" style={styles.cardSubtitle}>
-          Enter your credentials to continue
+          {t('auth.enterCredentials')}
         </AppText>
 
         <LoginForm
@@ -94,11 +97,11 @@ export default function LoginScreen() {
 
         <View style={styles.footer}>
           <AppText variant="body" color="#6B7280">
-            Don't have an account?{' '}
+            {t('auth.noAccount')}{' '}
           </AppText>
           <Pressable onPress={navigateToRegister}>
-            <AppText variant="body" color="#208AEF" style={styles.link}>
-              Create one
+            <AppText variant="body" color={BrandColors.coral} style={styles.link}>
+              {t('auth.createOne')}
             </AppText>
           </Pressable>
         </View>

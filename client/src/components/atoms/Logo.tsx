@@ -6,8 +6,10 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
+import { BrandColors } from '@/constants/theme';
 
-const BRAND = '#208AEF';
+// Use the coral brand color for the logo
+const BRAND = BrandColors.coral;
 
 export function Logo() {
   return (

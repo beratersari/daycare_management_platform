@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
+import { BrandColors } from '@/constants/theme';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost';
 
@@ -23,8 +24,9 @@ export interface ButtonProps extends PressableProps {
   style?: ViewStyle;
 }
 
-const BRAND = '#208AEF';
-const BRAND_DARK = '#1A70C8';
+// Use brand colors for button styling
+const PRIMARY = BrandColors.coral;
+const PRIMARY_DARK = '#D94D5F';
 
 export function Button({
   label,
@@ -54,13 +56,13 @@ export function Button({
       {...rest}>
       {isLoading ? (
         <ActivityIndicator
-          color={variant === 'primary' ? '#fff' : BRAND}
+          color={variant === 'primary' ? '#fff' : PRIMARY}
           size="small"
         />
       ) : (
         <AppText
           variant="subheading"
-          color={variant === 'primary' ? '#fff' : BRAND}
+          color={variant === 'primary' ? '#fff' : PRIMARY}
           style={styles.label}>
           {label}
         </AppText>
@@ -81,12 +83,12 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   primary: {
-    backgroundColor: BRAND,
+    backgroundColor: PRIMARY,
   },
   secondary: {
     backgroundColor: 'transparent',
     borderWidth: 1.5,
-    borderColor: BRAND,
+    borderColor: PRIMARY,
   },
   ghost: {
     backgroundColor: 'transparent',

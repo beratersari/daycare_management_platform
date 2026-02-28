@@ -9,6 +9,7 @@ import { StyleSheet, View } from 'react-native';
 import { Button } from '@/components/atoms/Button';
 import { AlertBanner } from '@/components/molecules/AlertBanner';
 import { FormField } from '@/components/molecules/FormField';
+import { useLocalization } from '@/hooks/use-localization';
 
 export interface LoginFormValues {
   email: string;
@@ -21,25 +22,26 @@ interface LoginFormProps {
   errorMessage?: string | null;
 }
 
-function validateEmail(email: string): string | undefined {
-  if (!email.trim()) return 'Email is required';
-  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!re.test(email)) return 'Please enter a valid email address';
-  return undefined;
-}
-
-function validatePassword(password: string): string | undefined {
-  if (!password) return 'Password is required';
-  if (password.length < 6) return 'Password must be at least 6 characters';
-  return undefined;
-}
-
 export function LoginForm({ onSubmit, isLoading, errorMessage }: LoginFormProps) {
+  const { t } = useLocalization();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState<string | undefined>();
   const [passwordError, setPasswordError] = useState<string | undefined>();
   const [touched, setTouched] = useState({ email: false, password: false });
+
+  const validateEmail = (email: string): string | undefined => {
+    if (!email.trim()) return t('auth.emailRequired');
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!re.test(email)) return t('auth.emailInvalid');
+    return undefined;
+  };
+
+  const validatePassword = (password: string): string | undefined => {
+    if (!password) return t('auth.passwordRequired');
+    if (password.length < 6) return t('auth.passwordMinLength');
+    return undefined;
+  };
 
   const handleEmailBlur = () => {
     setTouched((t) => ({ ...t, email: true }));
@@ -78,7 +80,7 @@ export function LoginForm({ onSubmit, isLoading, errorMessage }: LoginFormProps)
       ) : null}
 
       <FormField
-        label="Email"
+        label={t('auth.email')}
         placeholder="you@example.com"
         keyboardType="email-address"
         value={email}
@@ -90,7 +92,7 @@ export function LoginForm({ onSubmit, isLoading, errorMessage }: LoginFormProps)
       />
 
       <FormField
-        label="Password"
+        label={t('auth.password')}
         placeholder="••••••••"
         value={password}
         onChangeText={handlePasswordChange}
@@ -104,7 +106,7 @@ export function LoginForm({ onSubmit, isLoading, errorMessage }: LoginFormProps)
       />
 
       <Button
-        label="Sign In"
+        label={t('auth.signIn')}
         onPress={handleSubmit}
         isLoading={isLoading}
         disabled={isLoading}

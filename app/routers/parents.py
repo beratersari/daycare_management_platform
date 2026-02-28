@@ -6,7 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.database.connection import get_db
 from app.logger import get_logger
 from app.repositories.user_repository import UserRepository
+from app.repositories.student_repository import StudentRepository
 from app.schemas.auth import UserResponse, UserRole
+from app.schemas.student import StudentResponse
 from app.schemas.pagination import PaginatedResponse
 from app.auth.dependencies import (
     get_current_user,
@@ -22,6 +24,11 @@ router = APIRouter(prefix="/api/v1/parents", tags=["Parents"])
 def get_user_repo(db: sqlite3.Connection = Depends(get_db)) -> UserRepository:
     logger.trace("Creating UserRepository dependency")
     return UserRepository(db)
+
+
+def get_student_repo(db: sqlite3.Connection = Depends(get_db)) -> StudentRepository:
+    logger.trace("Creating StudentRepository dependency")
+    return StudentRepository(db)
 
 
 @router.get("/", response_model=PaginatedResponse[UserResponse])
@@ -77,3 +84,27 @@ def get_parent(
         raise HTTPException(status_code=403, detail="You can only view your own profile")
     check_school_ownership(current_user, parent.get("school_id"))
     return UserResponse(**parent)
+
+
+@router.get("/me/children", response_model=list[StudentResponse])
+def get_my_children(
+    current_user: dict = Depends(get_current_user),
+    user_repo: UserRepository = Depends(get_user_repo),
+    student_repo: StudentRepository = Depends(get_student_repo),
+):
+    """Get children linked to the current parent user. PARENT only."""
+    logger.info("GET /api/v1/parents/me/children — get my children request")
+    if current_user.get("role") != UserRole.PARENT.value:
+        raise HTTPException(status_code=403, detail="Only parents can access this endpoint")
+    
+    user_id = current_user.get("sub")
+    student_ids = user_repo.get_student_ids_for_parent(user_id)
+    logger.info("GET /api/v1/parents/me/children — found %d children for parent %s", len(student_ids), user_id)
+    
+    children = []
+    for sid in student_ids:
+        student = student_repo.get_by_id(sid)
+        if student:
+            children.append(student)
+    
+    return children

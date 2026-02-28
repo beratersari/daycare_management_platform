@@ -4,6 +4,20 @@
  */
 import { Platform } from 'react-native';
 
+/**
+ * Brand Colors - Primary palette for the app
+ * #F26076 - Coral Pink (primary accent)
+ * #FF9760 - Orange (secondary accent)
+ * #FFD150 - Golden Yellow (tertiary accent)
+ * #458B73 - Teal Green (success/action color)
+ */
+export const BrandColors = {
+  coral: '#F26076',
+  orange: '#FF9760',
+  yellow: '#FFD150',
+  teal: '#458B73',
+} as const;
+
 export const Colors = {
   light: {
     text: '#000000',
@@ -11,6 +25,11 @@ export const Colors = {
     backgroundElement: '#F0F0F3',
     backgroundSelected: '#E0E1E6',
     textSecondary: '#60646C',
+    // Brand colors
+    primary: BrandColors.coral,
+    secondary: BrandColors.orange,
+    tertiary: BrandColors.yellow,
+    success: BrandColors.teal,
   },
   dark: {
     text: '#ffffff',
@@ -18,6 +37,11 @@ export const Colors = {
     backgroundElement: '#212225',
     backgroundSelected: '#2E3135',
     textSecondary: '#B0B4BA',
+    // Brand colors (same in dark mode for consistency)
+    primary: BrandColors.coral,
+    secondary: BrandColors.orange,
+    tertiary: BrandColors.yellow,
+    success: BrandColors.teal,
   },
 } as const;
 

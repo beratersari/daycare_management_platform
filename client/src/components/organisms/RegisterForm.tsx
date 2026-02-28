@@ -16,6 +16,7 @@ import { Button } from '@/components/atoms/Button';
 import { AlertBanner } from '@/components/molecules/AlertBanner';
 import { FormField } from '@/components/molecules/FormField';
 import { RoleSelector } from '@/components/molecules/RoleSelector';
+import { useLocalization } from '@/hooks/use-localization';
 import type { UserRole } from '@/store/api/authApi';
 
 // ---------------------------------------------------------------------------
@@ -39,45 +40,11 @@ interface RegisterFormProps {
 }
 
 // ---------------------------------------------------------------------------
-// Validation helpers
-// ---------------------------------------------------------------------------
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function validateRequired(value: string, label: string): string | undefined {
-  return value.trim() ? undefined : `${label} is required`;
-}
-
-function validateEmail(email: string): string | undefined {
-  if (!email.trim()) return 'Email is required';
-  if (!EMAIL_RE.test(email)) return 'Please enter a valid email address';
-  return undefined;
-}
-
-function validatePassword(password: string): string | undefined {
-  if (!password) return 'Password is required';
-  if (password.length < 6) return 'Password must be at least 6 characters';
-  return undefined;
-}
-
-function validateConfirm(password: string, confirm: string): string | undefined {
-  if (!confirm) return 'Please confirm your password';
-  if (confirm !== password) return 'Passwords do not match';
-  return undefined;
-}
-
-function validateSchoolId(value: string, role: UserRole): string | undefined {
-  if (role === 'ADMIN') return undefined; // not required
-  if (!value.trim()) return 'School ID is required for your role';
-  if (!/^\d+$/.test(value.trim())) return 'School ID must be a number';
-  return undefined;
-}
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function RegisterForm({ onSubmit, isLoading, errorMessage }: RegisterFormProps) {
+  const { t } = useLocalization();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName]   = useState('');
   const [email, setEmail]         = useState('');
@@ -89,6 +56,39 @@ export function RegisterForm({ onSubmit, isLoading, errorMessage }: RegisterForm
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
+  // ---- Validation helpers ----
+
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  const validateRequired = (value: string, label: string): string | undefined => {
+    return value.trim() ? undefined : t('auth.firstNameRequired').replace('First name', label);
+  };
+
+  const validateEmail = (email: string): string | undefined => {
+    if (!email.trim()) return t('auth.emailRequired');
+    if (!EMAIL_RE.test(email)) return t('auth.emailInvalid');
+    return undefined;
+  };
+
+  const validatePassword = (password: string): string | undefined => {
+    if (!password) return t('auth.passwordRequired');
+    if (password.length < 6) return t('auth.passwordMinLength');
+    return undefined;
+  };
+
+  const validateConfirm = (password: string, confirm: string): string | undefined => {
+    if (!confirm) return t('auth.confirmPassword');
+    if (confirm !== password) return t('auth.passwordMismatch');
+    return undefined;
+  };
+
+  const validateSchoolId = (value: string, role: UserRole): string | undefined => {
+    if (role === 'ADMIN') return undefined; // not required
+    if (!value.trim()) return t('auth.schoolIdRequired');
+    if (!/^\d+$/.test(value.trim())) return t('auth.schoolIdNumber');
+    return undefined;
+  };
+
   // ---- per-field blur handlers ----
 
   const touch = (field: string) =>
@@ -97,21 +97,21 @@ export function RegisterForm({ onSubmit, isLoading, errorMessage }: RegisterForm
   const setError = (field: string, msg: string | undefined) =>
     setErrors((e) => ({ ...e, [field]: msg }));
 
-  const handleFirstNameBlur  = () => { touch('firstName');  setError('firstName',  validateRequired(firstName, 'First name')); };
-  const handleLastNameBlur   = () => { touch('lastName');   setError('lastName',   validateRequired(lastName,  'Last name'));  };
-  const handleEmailBlur      = () => { touch('email');      setError('email',      validateEmail(email));                     };
-  const handlePasswordBlur   = () => { touch('password');   setError('password',   validatePassword(password));               };
-  const handleConfirmBlur    = () => { touch('confirm');    setError('confirm',    validateConfirm(password, confirm));        };
-  const handleSchoolIdBlur   = () => { touch('schoolId');   setError('schoolId',   validateSchoolId(schoolIdStr, role));       };
+  const handleFirstNameBlur  = () => { touch('firstName');  setError('firstName',  validateRequired(firstName, t('auth.firstName'))); };
+  const handleLastNameBlur   = () => { touch('lastName');   setError('lastName',   validateRequired(lastName, t('auth.lastName'))); };
+  const handleEmailBlur      = () => { touch('email');      setError('email',      validateEmail(email)); };
+  const handlePasswordBlur   = () => { touch('password');   setError('password',   validatePassword(password)); };
+  const handleConfirmBlur    = () => { touch('confirm');    setError('confirm',    validateConfirm(password, confirm)); };
+  const handleSchoolIdBlur   = () => { touch('schoolId');   setError('schoolId',   validateSchoolId(schoolIdStr, role)); };
 
   // ---- live-update handlers (only re-validate if already touched) ----
 
-  const onFirstName  = (v: string) => { setFirstName(v);  if (touched.firstName)  setError('firstName',  validateRequired(v, 'First name')); };
-  const onLastName   = (v: string) => { setLastName(v);   if (touched.lastName)   setError('lastName',   validateRequired(v, 'Last name'));  };
-  const onEmail      = (v: string) => { setEmail(v);      if (touched.email)      setError('email',      validateEmail(v));                  };
-  const onPassword   = (v: string) => { setPassword(v);   if (touched.password)   setError('password',   validatePassword(v));               };
-  const onConfirm    = (v: string) => { setConfirm(v);    if (touched.confirm)    setError('confirm',    validateConfirm(password, v));       };
-  const onSchoolId   = (v: string) => { setSchoolIdStr(v); if (touched.schoolId)  setError('schoolId',   validateSchoolId(v, role));          };
+  const onFirstName  = (v: string) => { setFirstName(v);  if (touched.firstName)  setError('firstName',  validateRequired(v, t('auth.firstName'))); };
+  const onLastName   = (v: string) => { setLastName(v);   if (touched.lastName)   setError('lastName',   validateRequired(v, t('auth.lastName'))); };
+  const onEmail      = (v: string) => { setEmail(v);      if (touched.email)      setError('email',      validateEmail(v)); };
+  const onPassword   = (v: string) => { setPassword(v);   if (touched.password)   setError('password',   validatePassword(v)); };
+  const onConfirm    = (v: string) => { setConfirm(v);    if (touched.confirm)    setError('confirm',    validateConfirm(password, v)); };
+  const onSchoolId   = (v: string) => { setSchoolIdStr(v); if (touched.schoolId)  setError('schoolId',   validateSchoolId(v, role)); };
 
   const onRoleChange = (r: UserRole) => {
     setRole(r);
@@ -126,8 +126,8 @@ export function RegisterForm({ onSubmit, isLoading, errorMessage }: RegisterForm
     setTouched(allTouched);
 
     const newErrors = {
-      firstName:  validateRequired(firstName, 'First name'),
-      lastName:   validateRequired(lastName,  'Last name'),
+      firstName:  validateRequired(firstName, t('auth.firstName')),
+      lastName:   validateRequired(lastName, t('auth.lastName')),
       email:      validateEmail(email),
       password:   validatePassword(password),
       confirm:    validateConfirm(password, confirm),
@@ -157,7 +157,7 @@ export function RegisterForm({ onSubmit, isLoading, errorMessage }: RegisterForm
       <View style={styles.row}>
         <View style={styles.halfField}>
           <FormField
-            label="First Name"
+            label={t('auth.firstName')}
             placeholder="Alice"
             value={firstName}
             onChangeText={onFirstName}
@@ -169,7 +169,7 @@ export function RegisterForm({ onSubmit, isLoading, errorMessage }: RegisterForm
         </View>
         <View style={styles.halfField}>
           <FormField
-            label="Last Name"
+            label={t('auth.lastName')}
             placeholder="Smith"
             value={lastName}
             onChangeText={onLastName}
@@ -182,7 +182,7 @@ export function RegisterForm({ onSubmit, isLoading, errorMessage }: RegisterForm
       </View>
 
       <FormField
-        label="Email"
+        label={t('auth.email')}
         placeholder="you@example.com"
         keyboardType="email-address"
         value={email}
@@ -194,7 +194,7 @@ export function RegisterForm({ onSubmit, isLoading, errorMessage }: RegisterForm
       />
 
       <FormField
-        label="Password"
+        label={t('auth.password')}
         placeholder="••••••••"
         value={password}
         onChangeText={onPassword}
@@ -207,7 +207,7 @@ export function RegisterForm({ onSubmit, isLoading, errorMessage }: RegisterForm
       />
 
       <FormField
-        label="Confirm Password"
+        label={t('auth.confirmPassword')}
         placeholder="••••••••"
         value={confirm}
         onChangeText={onConfirm}
@@ -223,7 +223,7 @@ export function RegisterForm({ onSubmit, isLoading, errorMessage }: RegisterForm
 
       {role !== 'ADMIN' ? (
         <FormField
-          label="School ID"
+          label={t('auth.schoolId')}
           placeholder="e.g. 1"
           keyboardType="number-pad"
           value={schoolIdStr}
@@ -236,7 +236,7 @@ export function RegisterForm({ onSubmit, isLoading, errorMessage }: RegisterForm
       ) : null}
 
       <Button
-        label="Create Account"
+        label={t('auth.createAccount')}
         onPress={handleSubmit}
         isLoading={isLoading}
         disabled={isLoading}

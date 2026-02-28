@@ -17,6 +17,7 @@ class UserRole(str, Enum):
     DIRECTOR = "DIRECTOR"
     TEACHER = "TEACHER"
     PARENT = "PARENT"
+    STUDENT = "STUDENT"
 
 
 class UserRegister(BaseModel):

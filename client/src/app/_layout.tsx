@@ -22,6 +22,7 @@ import React, { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { Provider, useDispatch } from 'react-redux';
 import { PersistGate } from 'redux-persist/integration/react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { persistor, store } from '@/store';
 import { setHydrated } from '@/store/authSlice';
@@ -39,21 +40,24 @@ function HydrationWatcher() {
 function HydrationLoader() {
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <ActivityIndicator size="large" color="#208AEF" />
+      <ActivityIndicator size="large" color="#F26076" />
     </View>
   );
 }
 
 export default function RootLayout() {
   return (
-    <Provider store={store}>
-      <PersistGate loading={<HydrationLoader />} persistor={persistor}>
-        <HydrationWatcher />
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" options={{ title: 'Sign In' }} />
-          <Stack.Screen name="dashboard" options={{ title: 'Dashboard' }} />
-        </Stack>
-      </PersistGate>
-    </Provider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <Provider store={store}>
+        <PersistGate loading={<HydrationLoader />} persistor={persistor}>
+          <HydrationWatcher />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" options={{ title: 'Sign In' }} />
+            <Stack.Screen name="dashboard" options={{ title: 'Dashboard' }} />
+            <Stack.Screen name="student/[id]" options={{ title: 'Student Detail', presentation: 'modal' }} />
+          </Stack>
+        </PersistGate>
+      </Provider>
+    </GestureHandlerRootView>
   );
 }

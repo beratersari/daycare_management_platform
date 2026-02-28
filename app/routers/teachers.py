@@ -10,6 +10,7 @@ from app.repositories.class_repository import ClassRepository
 from app.services.class_service import ClassService
 from app.schemas.auth import UserResponse, UserRole, TeacherAssignClassesRequest, TeacherClassesResponse
 from app.schemas.class_dto import ClassResponse
+from app.schemas.student import StudentResponse
 from app.schemas.pagination import PaginatedResponse
 from app.auth.dependencies import (
     require_admin_or_director,
@@ -196,3 +197,30 @@ def unassign_teacher_from_class(
     check_school_ownership(current_user, teacher.get("school_id"))
     user_repo.unassign_teacher_from_class(teacher_id, class_id)
     return None
+
+
+@router.get("/me/students", response_model=list[StudentResponse])
+def get_my_students(
+    current_user: dict = Depends(require_admin_director_or_teacher),
+    user_repo: UserRepository = Depends(get_user_repo),
+    class_service: ClassService = Depends(get_class_service),
+):
+    """Get all students in the current teacher's classes. TEACHER only."""
+    logger.info("GET /api/v1/teachers/me/students — get my students request")
+    if current_user.get("role") != UserRole.TEACHER.value:
+        raise HTTPException(status_code=403, detail="Only teachers can access this endpoint")
+    
+    user_id = current_user.get("sub")
+    class_ids = user_repo.get_teacher_class_ids(user_id)
+    logger.info("GET /api/v1/teachers/me/students — found %d classes for teacher %s", len(class_ids), user_id)
+    
+    students = []
+    seen_ids = set()
+    for cid in class_ids:
+        class_students = class_service.student_repo.get_by_class_id(cid)
+        for student in class_students:
+            if student["student_id"] not in seen_ids:
+                seen_ids.add(student["student_id"])
+                students.append(student)
+    
+    return students

@@ -20,11 +20,14 @@ import { AlertBanner } from '@/components/molecules/AlertBanner';
 import { RegisterForm, type RegisterFormValues } from '@/components/organisms/RegisterForm';
 import { AuthTemplate } from '@/components/templates/AuthTemplate';
 import { useRegisterMutation } from '@/store/api/authApi';
+import { useLocalization } from '@/hooks/use-localization';
+import { BrandColors } from '@/constants/theme';
 
-const BRAND = '#208AEF';
+const BRAND = BrandColors.coral;
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { t } = useLocalization();
   const [register, { isLoading, reset }] = useRegisterMutation();
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -42,7 +45,7 @@ export default function RegisterScreen() {
     try {
       const created = await register(values).unwrap();
       setSuccessMessage(
-        `Account created for ${created.first_name} ${created.last_name}! Redirecting to sign in…`,
+        t('auth.registrationSuccess', { name: `${created.first_name} ${created.last_name}` }),
       );
       redirectTimer.current = setTimeout(() => router.replace('/'), 1500);
     } catch (err: unknown) {
@@ -68,7 +71,7 @@ export default function RegisterScreen() {
       {/* Card */}
       <View style={styles.card}>
         <AppText variant="heading" style={styles.cardTitle}>
-          Create account
+          {t('auth.createAccount')}
         </AppText>
         <AppText variant="body" color="#6B7280" style={styles.cardSubtitle}>
           Fill in the details below to get started
@@ -88,11 +91,11 @@ export default function RegisterScreen() {
       {/* Back to login */}
       <View style={styles.footer}>
         <AppText variant="body" color="#6B7280">
-          Already have an account?{' '}
+          {t('auth.hasAccount')}{' '}
         </AppText>
         <Pressable onPress={goToLogin} hitSlop={8}>
           <AppText variant="body" color={BRAND} style={styles.link}>
-            Sign in
+            {t('auth.signIn')}
           </AppText>
         </Pressable>
       </View>

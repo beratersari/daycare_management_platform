@@ -15,6 +15,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
 import { useTheme } from '@/hooks/use-theme';
+import { BrandColors } from '@/constants/theme';
 import type { UserRole } from '@/store/api/authApi';
 
 /** Roles that end-users can self-register as. */
@@ -27,7 +28,8 @@ const ROLE_LABELS: Record<UserRole, string> = {
   PARENT: 'Parent',
 };
 
-const BRAND = '#208AEF';
+// Use brand color for selection
+const BRAND = BrandColors.coral;
 
 interface RoleSelectorProps {
   value: UserRole;

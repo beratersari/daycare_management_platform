@@ -2,9 +2,8 @@
  * RTK Query API slice for authentication endpoints.
  * Mirrors the backend /api/v1/auth/* routes.
  */
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-
-import { RootState } from '@/store';
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { baseQueryWithReauth } from './baseQuery';
 
 // ---------------------------------------------------------------------------
 // Types (mirror backend schemas/auth.py)
@@ -57,16 +56,7 @@ export interface RefreshTokenRequest {
 
 export const authApi = createApi({
   reducerPath: 'authApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: 'http://localhost:8000/api/v1',
-    prepareHeaders: (headers, { getState }) => {
-      const token = (getState() as RootState).auth.accessToken;
-      if (token) {
-        headers.set('Authorization', `Bearer ${token}`);
-      }
-      return headers;
-    },
-  }),
+  baseQuery: baseQueryWithReauth,
   endpoints: (builder) => ({
     /** POST /auth/register — create new user account */
     register: builder.mutation<UserResponse, UserRegisterRequest>({

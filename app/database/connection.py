@@ -433,6 +433,15 @@ def create_mock_data():
             "phone": "555-000-0004",
             "address": "789 Family Lane, Parentville"
         },
+        {
+            "email": "student@example.com",
+            "password": "student123",
+            "first_name": "Billy",
+            "last_name": "Kid",
+            "role": "STUDENT",
+            "phone": "555-000-0005",
+            "address": "123 Kid St, Student Town"
+        },
     ]
 
     for user in mock_users:
