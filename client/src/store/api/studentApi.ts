@@ -57,6 +57,7 @@ export interface PaginatedResponse<T> {
 export const studentApi = createApi({
   reducerPath: 'studentApi',
   baseQuery: baseQueryWithReauth,
+  tagTypes: ['Students', 'Classes'],
   endpoints: (builder) => ({
     /** GET /students/{student_id} — fetch a single student */
     getStudent: builder.query<StudentResponse, number>({
@@ -69,8 +70,32 @@ export const studentApi = createApi({
         url: '/students',
         params: { page, page_size: pageSize, search },
       }),
+      providesTags: ['Students'],
+    }),
+
+    /** POST /students/{student_id}/classes/{class_id} — enroll a student in a class */
+    enrollStudentInClass: builder.mutation<StudentResponse, { studentId: number; classId: number }>({
+      query: ({ studentId, classId }) => ({
+        url: `/students/${studentId}/classes/${classId}`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['Students', 'Classes'],
+    }),
+
+    /** DELETE /students/{student_id}/classes/{class_id} — unenroll a student from a class */
+    unenrollStudentFromClass: builder.mutation<void, { studentId: number; classId: number }>({
+      query: ({ studentId, classId }) => ({
+        url: `/students/${studentId}/classes/${classId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Students', 'Classes'],
     }),
   }),
 });
 
-export const { useGetStudentQuery, useListStudentsQuery } = studentApi;
+export const {
+  useGetStudentQuery,
+  useListStudentsQuery,
+  useEnrollStudentInClassMutation,
+  useUnenrollStudentFromClassMutation,
+} = studentApi;

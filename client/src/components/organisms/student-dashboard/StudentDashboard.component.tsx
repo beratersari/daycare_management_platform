@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import { View } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { AppText } from '@/components/atoms/app-text';
 import { Skeleton } from '@/components/atoms/skeleton';
@@ -18,6 +19,7 @@ import { styles } from './StudentDashboard.styles';
 export function StudentDashboard(_props: StudentDashboardProps) {
   const theme = useTheme();
   const { t } = useLocalization();
+  const router = useRouter();
   const { data: classesData, isLoading } = useListClassesQuery({ pageSize: 10 });
 
   if (isLoading) {
@@ -53,6 +55,7 @@ export function StudentDashboard(_props: StudentDashboardProps) {
             label={t('dashboard.events')}
             icon="calendar"
             colorVariant="orange"
+            onPress={() => router.push('/manage/events')}
           />
           <DashboardButton
             label={t('dashboard.mealMenus')}

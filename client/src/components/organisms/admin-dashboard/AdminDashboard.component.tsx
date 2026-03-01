@@ -10,8 +10,8 @@
  * ```
  */
 import { useRouter } from 'expo-router';
-import React from 'react';
-import { View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Pressable, View } from 'react-native';
 
 import { AppText } from '@/components/atoms/app-text';
 import { DashboardButton, ButtonColorVariant } from '@/components/molecules/dashboard-button';
@@ -21,6 +21,10 @@ import { useListTeachersQuery } from '@/store/api/teacherApi';
 import { useListStudentsQuery } from '@/store/api/studentApi';
 import { useListClassesQuery } from '@/store/api/classApi';
 import { useListParentsQuery } from '@/store/api/parentApi';
+import { useListSchoolsQuery } from '@/store/api/schoolApi';
+import { useAppSelector } from '@/store/hooks';
+import { selectCurrentUser } from '@/store/authSlice';
+import { BrandColors } from '@/constants/theme';
 import { AdminDashboardProps } from './AdminDashboard.types';
 import { styles } from './AdminDashboard.styles';
 
@@ -66,6 +70,32 @@ export function AdminDashboard(_props: AdminDashboardProps) {
   const theme = useTheme();
   const { t } = useLocalization();
   const router = useRouter();
+  const user = useAppSelector(selectCurrentUser);
+  const userRole = user?.role;
+
+  const [selectedSchoolId, setSelectedSchoolId] = useState<number | undefined>(user?.school_id || undefined);
+
+  const shouldLoadSchools = userRole === 'ADMIN' || userRole === 'DIRECTOR';
+
+  const { data: schools } = useListSchoolsQuery(undefined, {
+    skip: !shouldLoadSchools,
+  });
+
+  useEffect(() => {
+    if (userRole === 'ADMIN' && schools && schools.length > 0 && !selectedSchoolId) {
+      setSelectedSchoolId(schools[0].school_id);
+    }
+  }, [schools, userRole, selectedSchoolId]);
+
+  const selectedSchool = useMemo(() => {
+    if (userRole === 'ADMIN') {
+      return schools?.find((school) => school.school_id === selectedSchoolId) ?? null;
+    }
+    if (user?.school_id) {
+      return schools?.find((school) => school.school_id === user.school_id) ?? null;
+    }
+    return null;
+  }, [schools, selectedSchoolId, userRole, user?.school_id]);
 
   // Fetch overview statistics
   const { data: teachersData } = useListTeachersQuery({ pageSize: 1 });
@@ -79,6 +109,44 @@ export function AdminDashboard(_props: AdminDashboardProps) {
 
   return (
     <View style={styles.container}>
+      {(userRole === 'ADMIN' || userRole === 'DIRECTOR') && selectedSchool ? (
+        <View style={styles.section}>
+          <AppText variant="label" color={theme.textSecondary} style={styles.sectionLabel}>
+            {t('dashboard.managingSchool')}
+          </AppText>
+          {userRole === 'ADMIN' && schools && schools.length > 0 ? (
+            <View style={styles.selectorRow}>
+              {schools.map((school) => (
+                <Pressable
+                  key={school.school_id}
+                  onPress={() => setSelectedSchoolId(school.school_id)}
+                  style={[
+                    styles.selectorButton,
+                    selectedSchoolId === school.school_id && { backgroundColor: BrandColors.coral },
+                  ]}
+                >
+                  <AppText
+                    variant="caption"
+                    color={selectedSchoolId === school.school_id ? '#fff' : theme.text}
+                  >
+                    {school.school_name}
+                  </AppText>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <View style={[styles.selectedSchoolCard, { backgroundColor: theme.backgroundElement }]}>
+              <AppText variant="body">{selectedSchool.school_name}</AppText>
+              {selectedSchool.address ? (
+                <AppText variant="caption" color={theme.textSecondary}>
+                  {selectedSchool.address}
+                </AppText>
+              ) : null}
+            </View>
+          )}
+        </View>
+      ) : null}
+
       {/* Management Tools */}
       <View style={styles.section}>
         <AppText variant="label" color={theme.textSecondary} style={styles.sectionLabel}>

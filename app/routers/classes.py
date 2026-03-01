@@ -18,6 +18,7 @@ from app.schemas.class_dto import (
     ClassEventCreate,
     ClassEventUpdate,
     ClassEventResponse,
+    ClassEventWithClassResponse,
 )
 from app.schemas.pagination import PaginatedResponse
 from app.schemas.student import StudentResponse
@@ -118,6 +119,32 @@ def list_classes(
         has_previous=has_previous,
     )
 
+# --- User Events endpoint ---
+
+
+@router.get("/my-events", response_model=list[ClassEventWithClassResponse])
+def get_my_events(
+    current_user: dict = Depends(get_current_user),
+    service: ClassService = Depends(get_service),
+):
+    """
+    Get all events visible to the current user.
+    
+    - STUDENT: events from classes they're enrolled in
+    - PARENT: events from classes their children are enrolled in
+    - TEACHER: events from classes they're assigned to
+    - ADMIN/DIRECTOR: all events in their school
+    """
+    user_id = current_user.get("sub")
+    role = current_user.get("role")
+    
+    logger.info("GET /api/v1/classes/my-events — get events for user_id=%s role=%s", user_id, role)
+    
+    events = service.get_events_for_user(user_id, role)
+    
+    logger.info("GET /api/v1/classes/my-events — returning %d events", len(events))
+    return [ClassEventWithClassResponse(**e) for e in events]
+
 
 @router.get("/{class_id}", response_model=ClassResponse)
 def get_class(
@@ -137,6 +164,11 @@ def get_class(
     if current_user.get("role") != UserRole.PARENT.value:
         check_school_ownership(current_user, result.school_id)
     return result
+
+
+# --- User Events endpoint ---
+
+
 
 
 @router.put("/{class_id}", response_model=ClassResponse)
@@ -619,3 +651,8 @@ def delete_class_event(
     
     logger.info("DELETE /api/v1/classes/%s/events/%s — event deleted", class_id, event_id)
     return None
+
+
+# --- User Events endpoint ---
+
+

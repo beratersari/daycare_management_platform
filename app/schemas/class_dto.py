@@ -108,3 +108,17 @@ class ClassEventResponse(BaseModel):
     created_by: int
     created_at: str
     updated_at: str
+
+
+class ClassEventWithClassResponse(BaseModel):
+    """Schema for class event response with class name included."""
+    event_id: int
+    class_id: int
+    class_name: str
+    title: str
+    description: Optional[str] = None
+    photo_url: Optional[str] = None
+    event_date: str
+    created_by: int
+    created_at: str
+    updated_at: str

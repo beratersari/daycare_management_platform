@@ -495,3 +495,79 @@ class ClassRepository(BaseRepository):
         self.commit()
         logger.info("Event soft-deleted: id=%s", event_id)
         return True
+
+    def get_events_for_user(
+        self,
+        user_id: int,
+        role: str,
+        class_ids: Optional[list[int]] = None,
+    ) -> list[dict]:
+        """
+        Get events visible to a user based on their role.
+        
+        - STUDENT: events from classes they're enrolled in
+        - PARENT: events from classes their children are enrolled in
+        - TEACHER: events from classes they're assigned to
+        - ADMIN/DIRECTOR: all events (requires class_ids to be provided)
+        """
+        logger.debug("Fetching events for user_id=%s with role=%s", user_id, role)
+        
+        if not class_ids:
+            # Determine class_ids based on role
+            if role == "TEACHER":
+                self.cursor.execute(
+                    """SELECT tc.class_id FROM teacher_classes tc
+                       JOIN classes c ON tc.class_id = c.class_id
+                       WHERE tc.user_id = ? AND c.is_deleted = 0""",
+                    (user_id,),
+                )
+                class_ids = [row["class_id"] for row in self.cursor.fetchall()]
+            elif role == "STUDENT":
+                self.cursor.execute(
+                    """SELECT sc.class_id FROM student_classes sc
+                       JOIN classes c ON sc.class_id = c.class_id
+                       JOIN students s ON sc.student_id = s.student_id
+                       WHERE s.student_id = (SELECT student_id FROM users WHERE user_id = ?)
+                         AND c.is_deleted = 0""",
+                    (user_id,),
+                )
+                class_ids = [row["class_id"] for row in self.cursor.fetchall()]
+            elif role == "PARENT":
+                self.cursor.execute(
+                    """SELECT DISTINCT sc.class_id FROM student_classes sc
+                       JOIN classes c ON sc.class_id = c.class_id
+                       JOIN student_parents sp ON sc.student_id = sp.student_id
+                       WHERE sp.user_id = ? AND c.is_deleted = 0""",
+                    (user_id,),
+                )
+                class_ids = [row["class_id"] for row in self.cursor.fetchall()]
+            else:
+                # ADMIN/DIRECTOR - get all events
+                self.cursor.execute(
+                    """SELECT ce.*, c.class_name FROM class_events ce
+                       JOIN classes c ON ce.class_id = c.class_id
+                       WHERE ce.is_deleted = 0 AND c.is_deleted = 0
+                       ORDER BY ce.event_date DESC, ce.created_at DESC"""
+                )
+                results = [dict(row) for row in self.cursor.fetchall()]
+                logger.info("Retrieved %d events for admin/director user_id=%s", len(results), user_id)
+                return results
+        
+        if not class_ids:
+            logger.info("No classes found for user_id=%s with role=%s", user_id, role)
+            return []
+        
+        # Build query with class_ids
+        placeholders = ",".join("?" * len(class_ids))
+        self.cursor.execute(
+            f"""SELECT ce.*, c.class_name FROM class_events ce
+               JOIN classes c ON ce.class_id = c.class_id
+               WHERE ce.class_id IN ({placeholders}) 
+                 AND ce.is_deleted = 0 
+                 AND c.is_deleted = 0
+               ORDER BY ce.event_date DESC, ce.created_at DESC""",
+            tuple(class_ids),
+        )
+        results = [dict(row) for row in self.cursor.fetchall()]
+        logger.info("Retrieved %d events for user_id=%s with role=%s", len(results), user_id, role)
+        return results

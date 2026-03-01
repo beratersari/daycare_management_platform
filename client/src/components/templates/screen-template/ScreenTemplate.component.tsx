@@ -37,7 +37,7 @@ export function ScreenTemplate({
       edges={['top', 'bottom']}>
       {header}
       {scrollable ? (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           {children}
         </ScrollView>
       ) : (

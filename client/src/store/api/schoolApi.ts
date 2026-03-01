@@ -15,7 +15,6 @@ export interface SchoolResponse {
   capacity?: number;
   active_term_id?: number;
   created_date: string;
-  is_deleted: number;
 }
 
 export const schoolApi = createApi({

@@ -122,11 +122,11 @@ def get_teacher_classes(
 def assign_teacher_to_class(
     teacher_id: int,
     class_id: int,
-    current_user: dict = Depends(require_admin_or_director),
+    current_user: dict = Depends(require_admin_director_or_teacher),
     user_repo: UserRepository = Depends(get_user_repo),
     class_repo: ClassRepository = Depends(get_class_repo),
 ):
-    """Assign a teacher (user) to a class."""
+    """Assign a teacher (user) to a class. ADMIN, DIRECTOR, or TEACHER."""
     logger.info("POST /api/v1/teachers/%s/classes/%s — assign teacher", teacher_id, class_id)
     teacher = user_repo.get_by_id(teacher_id)
     if not teacher or teacher.get("role") != UserRole.TEACHER.value:
@@ -134,6 +134,11 @@ def assign_teacher_to_class(
     if not class_repo.exists(class_id):
         raise HTTPException(status_code=404, detail="Class not found")
     check_school_ownership(current_user, teacher.get("school_id"))
+    if current_user.get("role") == UserRole.TEACHER.value and current_user.get("sub") != teacher_id:
+        raise HTTPException(status_code=403, detail="You can only manage your own assignments")
+    class_data = class_repo.get_by_id(class_id)
+    if class_data and class_data.get("school_id") != teacher.get("school_id"):
+        raise HTTPException(status_code=403, detail="Teacher and class must belong to the same school")
     user_repo.assign_teacher_to_class(teacher_id, class_id)
     return None
 
@@ -142,13 +147,13 @@ def assign_teacher_to_class(
 def assign_teacher_to_multiple_classes(
     teacher_id: int,
     request: TeacherAssignClassesRequest,
-    current_user: dict = Depends(require_admin_or_director),
+    current_user: dict = Depends(require_admin_director_or_teacher),
     user_repo: UserRepository = Depends(get_user_repo),
     class_repo: ClassRepository = Depends(get_class_repo),
 ):
     """
     Assign a teacher to multiple classes at once (replaces all current assignments).
-    ADMIN or DIRECTOR only.
+    ADMIN, DIRECTOR, or TEACHER.
     """
     logger.info(
         "PUT /api/v1/teachers/%s/classes — assign teacher to classes %s",
@@ -159,12 +164,21 @@ def assign_teacher_to_multiple_classes(
         raise HTTPException(status_code=404, detail="Teacher not found")
     check_school_ownership(current_user, teacher.get("school_id"))
 
-    # Validate all class IDs exist
+    if current_user.get("role") == UserRole.TEACHER.value and current_user.get("sub") != teacher_id:
+        raise HTTPException(status_code=403, detail="You can only manage your own assignments")
+
+    # Validate all class IDs exist and belong to the teacher's school
     for class_id in request.class_ids:
-        if not class_repo.exists(class_id):
+        class_data = class_repo.get_by_id(class_id)
+        if not class_data:
             raise HTTPException(
                 status_code=404,
                 detail=f"Class with id {class_id} not found",
+            )
+        if class_data.get("school_id") != teacher.get("school_id"):
+            raise HTTPException(
+                status_code=403,
+                detail="Teacher and class must belong to the same school",
             )
 
     # Replace all assignments
@@ -183,11 +197,11 @@ def assign_teacher_to_multiple_classes(
 def unassign_teacher_from_class(
     teacher_id: int,
     class_id: int,
-    current_user: dict = Depends(require_admin_or_director),
+    current_user: dict = Depends(require_admin_director_or_teacher),
     user_repo: UserRepository = Depends(get_user_repo),
     class_repo: ClassRepository = Depends(get_class_repo),
 ):
-    """Unassign a teacher (user) from a class."""
+    """Unassign a teacher (user) from a class. ADMIN, DIRECTOR, or TEACHER."""
     logger.info("DELETE /api/v1/teachers/%s/classes/%s — unassign teacher", teacher_id, class_id)
     teacher = user_repo.get_by_id(teacher_id)
     if not teacher or teacher.get("role") != UserRole.TEACHER.value:
@@ -195,6 +209,11 @@ def unassign_teacher_from_class(
     if not class_repo.exists(class_id):
         raise HTTPException(status_code=404, detail="Class not found")
     check_school_ownership(current_user, teacher.get("school_id"))
+    if current_user.get("role") == UserRole.TEACHER.value and current_user.get("sub") != teacher_id:
+        raise HTTPException(status_code=403, detail="You can only manage your own assignments")
+    class_data = class_repo.get_by_id(class_id)
+    if class_data and class_data.get("school_id") != teacher.get("school_id"):
+        raise HTTPException(status_code=403, detail="Teacher and class must belong to the same school")
     user_repo.unassign_teacher_from_class(teacher_id, class_id)
     return None
 

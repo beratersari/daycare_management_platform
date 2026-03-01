@@ -45,14 +45,14 @@ app.add_middleware(
     allow_origins=[
         # Localhost variants
         "http://localhost:8000",
-        "http://localhost:8081",   # Expo web dev server (default)
+        "http://localhost:8002",   # Expo web dev server (default)
         "http://localhost:19000",  # Expo dev tools
         "http://localhost:19006",  # Expo web (legacy)
         "http://localhost:3000",   # React/Vite default
         "http://localhost:5173",   # Vite default
         # 127.0.0.1 variants
         "http://127.0.0.1:8000",
-        "http://127.0.0.1:8081",
+        "http://127.0.0.1:8002",
         "http://127.0.0.1:19000",
         "http://127.0.0.1:19006",
         "http://127.0.0.1:3000",

@@ -165,6 +165,17 @@ def enroll_in_class(
 ):
     """Enroll a student in a class. ADMIN, DIRECTOR, or TEACHER."""
     logger.info("POST /api/v1/students/%s/classes/%s — enroll student in class", student_id, class_id)
+    student = service.get_by_id(student_id)
+    if not student:
+        logger.warning("POST /api/v1/students/%s/classes/%s — 404 student not found", student_id, class_id)
+        raise HTTPException(status_code=404, detail="Student not found")
+    check_school_ownership(current_user, student.school_id)
+    class_data = service.class_repo.get_by_id(class_id)
+    if not class_data:
+        logger.warning("POST /api/v1/students/%s/classes/%s — 404 class not found", student_id, class_id)
+        raise HTTPException(status_code=404, detail="Class not found")
+    if class_data.get("school_id") != student.school_id:
+        raise HTTPException(status_code=403, detail="Student and class must belong to the same school")
     result, error = service.enroll_in_class(student_id, class_id)
     if error:
         if "not found" in error.lower():
@@ -179,11 +190,22 @@ def enroll_in_class(
 def unenroll_from_class(
     student_id: int,
     class_id: int,
-    current_user: dict = Depends(require_admin_or_director),
+    current_user: dict = Depends(require_admin_director_or_teacher),
     service: StudentService = Depends(get_service),
 ):
-    """Unenroll a student from a class. ADMIN or DIRECTOR only."""
+    """Unenroll a student from a class. ADMIN, DIRECTOR, or TEACHER."""
     logger.info("DELETE /api/v1/students/%s/classes/%s — unenroll student from class", student_id, class_id)
+    student = service.get_by_id(student_id)
+    if not student:
+        logger.warning("DELETE /api/v1/students/%s/classes/%s — 404 student not found", student_id, class_id)
+        raise HTTPException(status_code=404, detail="Student not found")
+    check_school_ownership(current_user, student.school_id)
+    class_data = service.class_repo.get_by_id(class_id)
+    if not class_data:
+        logger.warning("DELETE /api/v1/students/%s/classes/%s — 404 class not found", student_id, class_id)
+        raise HTTPException(status_code=404, detail="Class not found")
+    if class_data.get("school_id") != student.school_id:
+        raise HTTPException(status_code=403, detail="Student and class must belong to the same school")
     success, error = service.unenroll_from_class(student_id, class_id)
     if not success:
         if "not found" in error.lower():

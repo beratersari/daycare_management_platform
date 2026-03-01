@@ -73,6 +73,7 @@ export function TeacherDashboard(_props: TeacherDashboardProps) {
             label={t('dashboard.events')}
             icon="calendar"
             colorVariant="orange"
+            onPress={() => router.push('/manage/events')}
           />
         </View>
         <View style={styles.buttonRow}>

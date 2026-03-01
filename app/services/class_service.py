@@ -541,3 +541,15 @@ class ClassService:
             student_allergies=allergies,
             student_hw_info=hw_info,
         )
+
+    def get_events_for_user(
+        self,
+        user_id: int,
+        role: str,
+    ) -> list[dict]:
+        """Get events visible to a user based on their role."""
+        logger.debug("Fetching events for user_id=%s with role=%s", user_id, role)
+        
+        events = self.repo.get_events_for_user(user_id, role)
+        logger.info("Retrieved %d events for user_id=%s with role=%s", len(events), user_id, role)
+        return events

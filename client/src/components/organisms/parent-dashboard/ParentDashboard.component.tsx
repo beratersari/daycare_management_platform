@@ -147,6 +147,7 @@ export function ParentDashboard(_props: ParentDashboardProps) {
             label={t('dashboard.events')}
             icon="calendar"
             colorVariant="orange"
+            onPress={() => router.push('/manage/events')}
           />
         </View>
         <View style={styles.buttonRow}>

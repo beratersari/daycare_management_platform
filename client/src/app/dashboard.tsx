@@ -103,7 +103,7 @@ export default function DashboardScreen() {
     <SafeAreaView
       style={[styles.safe, { backgroundColor: theme.background }]}
       edges={['top', 'bottom']}>
-      <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         {/* Header */}
         <View style={styles.header}>
           <AppText variant="display" style={styles.greeting}>
@@ -138,7 +138,7 @@ export default function DashboardScreen() {
           isLoading={isLoggingOut}
           style={styles.logoutButton}
         />
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -148,7 +148,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   container: {
-    flex: 1,
     paddingHorizontal: 16,
     paddingTop: 20,
     paddingBottom: 16,
