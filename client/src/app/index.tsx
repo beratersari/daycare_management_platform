@@ -8,10 +8,10 @@ import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { AppText } from '@/components/atoms/AppText';
-import { Logo } from '@/components/atoms/Logo';
-import { LoginForm, type LoginFormValues } from '@/components/organisms/LoginForm';
-import { AuthTemplate } from '@/components/templates/AuthTemplate';
+import { AppText } from '@/components/atoms/app-text';
+import { Logo } from '@/components/atoms/logo';
+import { LoginForm, type LoginFormValues } from '@/components/organisms/login-form';
+import { AuthTemplate } from '@/components/templates/auth-template';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useLoginMutation } from '@/store/api/authApi';
 import {

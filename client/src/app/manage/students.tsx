@@ -1,12 +1,21 @@
+/**
+ * Students Management Screen
+ *
+ * Page (Atomic Design):
+ * - Uses ScreenTemplate for consistent layout
+ * - Uses PageHeader for navigation
+ * - Uses InfoCard molecules for student cards
+ * - Uses LoadingState and EmptyState for UX consistency
+ */
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppText } from '@/components/atoms/AppText';
-import { Button } from '@/components/atoms/Button';
-import { Skeleton } from '@/components/atoms/Skeleton';
-import { InfoCard } from '@/components/molecules/InfoCard';
+import { AppText } from '@/components/atoms/app-text';
+import { PageHeader } from '@/components/molecules/page-header';
+import { InfoCard } from '@/components/molecules/info-card';
+import { LoadingState } from '@/components/molecules/loading-state';
+import { EmptyState } from '@/components/molecules/empty-state';
+import { ScreenTemplate } from '@/components/templates/screen-template';
 import { useTheme } from '@/hooks/use-theme';
 import { useLocalization } from '@/hooks/use-localization';
 import { useListStudentsQuery } from '@/store/api/studentApi';
@@ -20,43 +29,31 @@ export default function StudentsManagementScreen() {
   const students = studentsData?.data || [];
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <Button label={t('common.back')} onPress={() => router.back()} variant="ghost" style={styles.backButton} />
-        <AppText variant="heading" style={styles.headerTitle}>
-          {t('dashboard.manageStudents')}
-        </AppText>
-        <View style={{ width: 60 }} />
-      </View>
-      <ScrollView contentContainerStyle={styles.content}>
-        {isLoading ? (
-          <View style={{ gap: 12 }}>
-            <Skeleton width="100%" height={80} borderRadius={16} />
-            <Skeleton width="100%" height={80} borderRadius={16} />
-          </View>
-        ) : students.length > 0 ? (
-          students.map((student) => (
-            <InfoCard
-              key={student.student_id}
-              title={`${student.first_name} ${student.last_name}`}
-              subtitle={student.date_of_birth ? `${t('student.dateOfBirth')}: ${student.date_of_birth}` : undefined}
-              onPress={() => router.push(`/student/${student.student_id}`)}
-            />
-          ))
-        ) : (
-          <AppText variant="body" color={theme.textSecondary}>
-            No students found.
-          </AppText>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+    <ScreenTemplate
+      header={
+        <PageHeader
+          title={t('dashboard.manageStudents')}
+          onBack={() => router.back()}
+        />
+      }>
+      {isLoading ? (
+        <LoadingState cardCount={4} />
+      ) : students.length > 0 ? (
+        students.map((student) => (
+          <InfoCard
+            key={student.student_id}
+            title={`${student.first_name} ${student.last_name}`}
+            subtitle={student.date_of_birth ? `${t('student.dateOfBirth')}: ${student.date_of_birth}` : undefined}
+            onPress={() => router.push(`/student/${student.student_id}`)}
+          />
+        ))
+      ) : (
+        <EmptyState
+          icon="👶"
+          message="No students found"
+          subtitle="Students will appear here once added"
+        />
+      )}
+    </ScreenTemplate>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
-  backButton: { height: 40, width: 60, paddingHorizontal: 0 },
-  headerTitle: { textAlign: 'center' },
-  content: { padding: 24, gap: 12 },
-});

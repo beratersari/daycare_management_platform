@@ -14,11 +14,11 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { AppText } from '@/components/atoms/AppText';
-import { Logo } from '@/components/atoms/Logo';
-import { AlertBanner } from '@/components/molecules/AlertBanner';
-import { RegisterForm, type RegisterFormValues } from '@/components/organisms/RegisterForm';
-import { AuthTemplate } from '@/components/templates/AuthTemplate';
+import { AppText } from '@/components/atoms/app-text';
+import { Logo } from '@/components/atoms/logo';
+import { AlertBanner } from '@/components/molecules/alert-banner';
+import { RegisterForm, type RegisterFormValues } from '@/components/organisms/register-form';
+import { AuthTemplate } from '@/components/templates/auth-template';
 import { useRegisterMutation } from '@/store/api/authApi';
 import { useLocalization } from '@/hooks/use-localization';
 import { BrandColors } from '@/constants/theme';

@@ -7,10 +7,10 @@ import React, { useEffect } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppText } from '@/components/atoms/AppText';
-import { Button } from '@/components/atoms/Button';
-import { Skeleton } from '@/components/atoms/Skeleton';
-import { RoleBasedDashboard } from '@/components/organisms/RoleBasedDashboard';
+import { AppText } from '@/components/atoms/app-text';
+import { Button } from '@/components/atoms/button';
+import { Skeleton } from '@/components/atoms/skeleton';
+import { RoleBasedDashboard } from '@/components/organisms/role-based-dashboard';
 import { useTheme } from '@/hooks/use-theme';
 import { useLocalization } from '@/hooks/use-localization';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -127,15 +127,7 @@ export default function DashboardScreen() {
 
         {/* Role-based Dashboard Content */}
         <View style={styles.content}>
-          {isLoading ? (
-            <View style={{ gap: 16 }}>
-              <Skeleton width="100%" height={100} />
-              <Skeleton width="100%" height={150} />
-              <Skeleton width="100%" height={100} />
-            </View>
-          ) : (
-            <RoleBasedDashboard />
-          )}
+          <RoleBasedDashboard isLoading={isLoading} />
         </View>
 
         {/* Sign Out Button */}

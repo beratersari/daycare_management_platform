@@ -1,20 +1,29 @@
 /**
  * Meal Menu Management Screen
+ *
  * Role-based functionality:
  * - ADMIN/DIRECTOR/TEACHER: Can create, edit, delete meal menus
  * - PARENT/STUDENT: Can only view meal menus
+ *
+ * Page (Atomic Design):
+ * - Uses ScreenTemplate for consistent layout
+ * - Uses PageHeader for navigation
+ * - Uses InfoCard molecules for menu cards
+ * - Uses LoadingState and EmptyState for UX consistency
  */
 import { useRouter } from 'expo-router';
 import React, { useState, useMemo } from 'react';
-import { ScrollView, StyleSheet, View, Pressable, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Pressable, Platform, StyleSheet, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
-import { AppText } from '@/components/atoms/AppText';
-import { Button } from '@/components/atoms/Button';
-import { Skeleton } from '@/components/atoms/Skeleton';
-import { AppTextInput } from '@/components/atoms/TextInput';
-import { InfoCard } from '@/components/molecules/InfoCard';
+import { AppText } from '@/components/atoms/app-text';
+import { Button } from '@/components/atoms/button';
+import { AppTextInput } from '@/components/atoms/text-input';
+import { PageHeader } from '@/components/molecules/page-header';
+import { InfoCard } from '@/components/molecules/info-card';
+import { LoadingState } from '@/components/molecules/loading-state';
+import { EmptyState } from '@/components/molecules/empty-state';
+import { ScreenTemplate } from '@/components/templates/screen-template';
 import { useTheme } from '@/hooks/use-theme';
 import { useLocalization } from '@/hooks/use-localization';
 import { useAppSelector } from '@/store/hooks';
@@ -121,129 +130,126 @@ export default function MealMenusScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <Button label={t('common.back')} onPress={() => router.back()} variant="ghost" style={styles.backButton} />
-        <AppText variant="heading" style={styles.headerTitle}>
-          {t('dashboard.mealMenus')}
+    <ScreenTemplate
+      header={
+        <PageHeader
+          title={t('dashboard.mealMenus')}
+          onBack={() => router.back()}
+        />
+      }>
+      {/* School Selector (for ADMIN only) */}
+      {userRole === 'ADMIN' && schools && schools.length > 0 && (
+        <View style={styles.section}>
+          <AppText variant="label" color={theme.textSecondary}>
+            Select School
+          </AppText>
+          <View style={styles.selectorRow}>
+            {schools.map((school) => (
+              <Pressable
+                key={school.school_id}
+                onPress={() => setSelectedSchoolId(school.school_id)}
+                style={[
+                  styles.selectorButton,
+                  selectedSchoolId === school.school_id && { backgroundColor: BrandColors.coral },
+                ]}>
+                <AppText
+                  variant="caption"
+                  color={selectedSchoolId === school.school_id ? '#fff' : theme.text}>
+                  {school.school_name}
+                </AppText>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Date Selector */}
+      <View style={styles.dateSection}>
+        <AppText variant="label" color={theme.textSecondary}>
+          Select Date
         </AppText>
-        <View style={{ width: 60 }} />
+        {Platform.OS === 'web' ? (
+          <input
+            type="date"
+            value={dateStr}
+            onChange={(e) => setSelectedDate(new Date(e.target.value))}
+            style={{
+              padding: 12,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: theme.backgroundElement,
+              backgroundColor: theme.backgroundElement,
+              color: theme.text,
+              fontSize: 16,
+              outline: 'none',
+            } as any}
+          />
+        ) : (
+          <>
+            <Pressable
+              onPress={() => setShowDatePicker(true)}
+              style={[styles.dateButton, { backgroundColor: theme.backgroundElement }]}>
+              <AppText variant="body">{dateStr}</AppText>
+            </Pressable>
+            {showDatePicker && (
+              <DateTimePicker
+                value={selectedDate}
+                mode="date"
+                display="default"
+                onChange={handleDateChange}
+              />
+            )}
+          </>
+        )}
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* School Selector (for ADMIN only) */}
-        {userRole === 'ADMIN' && schools && schools.length > 0 && (
-          <View style={styles.section}>
-            <AppText variant="label" color={theme.textSecondary}>
-              Select School
-            </AppText>
-            <View style={styles.selectorRow}>
-              {schools.map((school) => (
-                <Pressable
-                  key={school.school_id}
-                  onPress={() => setSelectedSchoolId(school.school_id)}
-                  style={[
-                    styles.selectorButton,
-                    selectedSchoolId === school.school_id && { backgroundColor: BrandColors.coral },
-                  ]}>
-                  <AppText
-                    variant="caption"
-                    color={selectedSchoolId === school.school_id ? '#fff' : theme.text}>
-                    {school.school_name}
-                  </AppText>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        )}
+      {/* Create Button (for ADMIN/DIRECTOR/TEACHER only) */}
+      {canEdit && (
+        <Button
+          label={showCreateForm ? 'Cancel' : 'Add Meal Menu'}
+          onPress={() => setShowCreateForm(!showCreateForm)}
+          variant={showCreateForm ? 'secondary' : 'primary'}
+          style={styles.createButton}
+        />
+      )}
 
-        {/* Date Selector */}
-        <View style={styles.dateSection}>
-          <AppText variant="label" color={theme.textSecondary}>
-            Select Date
-          </AppText>
-          {Platform.OS === 'web' ? (
-            <input
-              type="date"
-              value={dateStr}
-              onChange={(e) => setSelectedDate(new Date(e.target.value))}
-              style={{
-                padding: 12,
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: theme.backgroundElement,
-                backgroundColor: theme.backgroundElement,
-                color: theme.text,
-                fontSize: 16,
-                outline: 'none',
-              } as any}
+      {/* Create Form */}
+      {showCreateForm && canEdit && (
+        <MealMenuCreateForm
+          onSubmit={handleCreateMenu}
+          isLoading={isCreating}
+          teacherClasses={teacherClasses}
+          userRole={userRole}
+        />
+      )}
+
+      {/* Meal Menus List */}
+      <View style={styles.listSection}>
+        <AppText variant="label" color={theme.textSecondary}>
+          Meal Menus for {dateStr}
+        </AppText>
+
+        {isLoading ? (
+          <LoadingState cardCount={2} cardHeight={120} />
+        ) : menusForDate.length > 0 ? (
+          menusForDate.map((menu) => (
+            <MealMenuCard
+              key={menu.menu_id}
+              menu={menu}
+              canEdit={canEdit}
+              onDelete={() => handleDeleteMenu(menu.menu_id)}
+              isDeleting={isDeleting}
             />
-          ) : (
-            <>
-              <Pressable
-                onPress={() => setShowDatePicker(true)}
-                style={[styles.dateButton, { backgroundColor: theme.backgroundElement }]}>
-                <AppText variant="body">{dateStr}</AppText>
-              </Pressable>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={selectedDate}
-                  mode="date"
-                  display="default"
-                  onChange={handleDateChange}
-                />
-              )}
-            </>
-          )}
-        </View>
-
-        {/* Create Button (for ADMIN/DIRECTOR/TEACHER only) */}
-        {canEdit && (
-          <Button
-            label={showCreateForm ? 'Cancel' : 'Add Meal Menu'}
-            onPress={() => setShowCreateForm(!showCreateForm)}
-            variant={showCreateForm ? 'secondary' : 'primary'}
-            style={styles.createButton}
+          ))
+        ) : (
+          <EmptyState
+            icon="🍽️"
+            message="No meal menu found"
+            subtitle={`No menu available for ${dateStr}`}
           />
         )}
-
-        {/* Create Form */}
-        {showCreateForm && canEdit && (
-          <MealMenuCreateForm
-            onSubmit={handleCreateMenu}
-            isLoading={isCreating}
-            teacherClasses={teacherClasses}
-            userRole={userRole}
-          />
-        )}
-
-        {/* Meal Menus List */}
-        <View style={styles.listSection}>
-          <AppText variant="label" color={theme.textSecondary}>
-            Meal Menus for {dateStr}
-          </AppText>
-
-          {isLoading ? (
-            <View style={{ gap: 12 }}>
-              <Skeleton width="100%" height={120} borderRadius={16} />
-              <Skeleton width="100%" height={120} borderRadius={16} />
-            </View>
-          ) : menusForDate.length > 0 ? (
-            menusForDate.map((menu) => (
-              <MealMenuCard
-                key={menu.menu_id}
-                menu={menu}
-                canEdit={canEdit}
-                onDelete={() => handleDeleteMenu(menu.menu_id)}
-                isDeleting={isDeleting}
-              />
-            ))
-          ) : (
-            <InfoCard title="No meal menu found" subtitle={`No menu available for ${dateStr}`} />
-          )}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+      </View>
+    </ScreenTemplate>
   );
 }
 
@@ -407,27 +413,20 @@ function MealMenuCreateForm({
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
+  section: {
+    gap: 8,
   },
-  header: {
+  selectorRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  backButton: {
-    height: 40,
-    width: 60,
-    paddingHorizontal: 0,
-  },
-  headerTitle: {
-    textAlign: 'center',
-  },
-  content: {
-    padding: 24,
-    gap: 16,
+  selectorButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#ddd',
   },
   dateSection: {
     gap: 8,
@@ -486,5 +485,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#ddd',
+  },
+  inputGroup: {
+    gap: 8,
   },
 });
