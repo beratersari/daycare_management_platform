@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 
 from app.schemas.student import StudentResponse
@@ -8,13 +8,31 @@ from app.schemas.auth import UserResponse
 class ClassCreate(BaseModel):
     class_name: str = Field(..., examples=["Sunflower Room"])
     school_id: int = Field(..., examples=[1], description="ID of the school this class belongs to")
-    capacity: Optional[int] = Field(None, examples=[20])
+    capacity: int = Field(..., examples=[20])
+
+    @field_validator("capacity")
+    @classmethod
+    def validate_capacity(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("Class capacity must be zero or greater")
+        if value > 30:
+            raise ValueError("Class capacity cannot exceed 30 students")
+        return value
 
 
 class ClassUpdate(BaseModel):
     class_name: Optional[str] = Field(None, examples=["Sunflower Room"])
     school_id: Optional[int] = Field(None, examples=[1], description="ID of the school this class belongs to")
-    capacity: Optional[int] = Field(None, examples=[20])
+    capacity: int = Field(..., examples=[20])
+
+    @field_validator("capacity")
+    @classmethod
+    def validate_capacity(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("Class capacity must be zero or greater")
+        if value > 30:
+            raise ValueError("Class capacity cannot exceed 30 students")
+        return value
 
 
 class ClassResponse(BaseModel):

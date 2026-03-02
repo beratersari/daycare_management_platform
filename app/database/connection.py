@@ -11,7 +11,7 @@ DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.a
 def get_connection() -> sqlite3.Connection:
     """Get a new SQLite connection with row_factory set."""
     logger.trace("Opening SQLite connection to %s", DB_PATH)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -24,7 +24,10 @@ def get_db():
     try:
         yield conn
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except sqlite3.ProgrammingError:
+            logger.warning("get_db: connection already closed")
         logger.trace("get_db: connection closed")
 
 

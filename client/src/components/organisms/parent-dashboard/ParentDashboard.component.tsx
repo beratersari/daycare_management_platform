@@ -158,9 +158,17 @@ export function ParentDashboard(_props: ParentDashboardProps) {
             onPress={() => router.push('/manage/meal-menus')}
           />
           <DashboardButton
+            label={t('terms.title')}
+            icon="calendar"
+            colorVariant="teal"
+            onPress={() => router.push('/manage/terms')}
+          />
+        </View>
+        <View style={styles.buttonRow}>
+          <DashboardButton
             label={t('dashboard.announcements')}
             icon="megaphone"
-            colorVariant="teal"
+            colorVariant="coral"
           />
         </View>
       </View>

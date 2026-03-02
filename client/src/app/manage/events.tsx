@@ -53,6 +53,7 @@ export default function EventsScreen() {
   const [photoUrl, setPhotoUrl] = useState('');
   const [eventDate, setEventDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const { data: events, isLoading, error, refetch } = useGetMyEventsQuery();
   const [createEvent, { isLoading: isCreating }] = useCreateClassEventMutation();
@@ -121,7 +122,15 @@ export default function EventsScreen() {
   };
 
   const handleCreateEvent = async () => {
-    if (!selectedClassId) return;
+    if (!selectedClassId) {
+      setFormError(t('events.classRequired'));
+      return;
+    }
+    if (!title.trim()) {
+      setFormError(t('events.titleRequired'));
+      return;
+    }
+
     const payload: ClassEventCreateRequest = {
       title: title.trim(),
       description: description.trim() || undefined,
@@ -136,6 +145,7 @@ export default function EventsScreen() {
       setDescription('');
       setPhotoUrl('');
       setSelectedClassId(undefined);
+      setFormError(null);
       refetch();
     } catch (err) {
       console.error('Failed to create event:', err);
@@ -246,6 +256,13 @@ export default function EventsScreen() {
           <AppText variant="subheading" style={styles.formTitle}>
             {t('events.createEvent')}
           </AppText>
+          {formError ? (
+            <View style={styles.formError}>
+              <AppText variant="caption" color={BrandColors.coral}>
+                {formError}
+              </AppText>
+            </View>
+          ) : null}
 
           <View style={styles.inputGroup}>
             <AppText variant="caption" color={theme.textSecondary}>
@@ -387,6 +404,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     gap: 12,
     marginBottom: 12,
+  },
+  formError: {
+    marginBottom: 4,
   },
   formTitle: {
     marginBottom: 8,

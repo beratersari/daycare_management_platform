@@ -48,6 +48,7 @@ export default function MealMenusScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | undefined>(user?.school_id || undefined);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const userRole = user?.role;
   const canEdit = userRole === 'ADMIN' || userRole === 'DIRECTOR' || userRole === 'TEACHER';
@@ -102,7 +103,16 @@ export default function MealMenusScreen() {
   }) => {
     const targetSchoolId = selectedSchoolId || user?.school_id;
     if (!targetSchoolId) {
-      console.error('No school ID available for creating meal menu');
+      setFormError(t('mealMenus.schoolRequired'));
+      return;
+    }
+
+    const breakfastValue = menuData.breakfast.trim();
+    const lunchValue = menuData.lunch.trim();
+    const dinnerValue = menuData.dinner.trim();
+
+    if (!breakfastValue && !lunchValue && !dinnerValue) {
+      setFormError(t('mealMenus.itemsRequired'));
       return;
     }
     
@@ -111,11 +121,12 @@ export default function MealMenusScreen() {
         school_id: targetSchoolId,
         class_id: menuData.classId || null,
         menu_date: dateStr,
-        breakfast: menuData.breakfast || null,
-        lunch: menuData.lunch || null,
-        dinner: menuData.dinner || null,
+        breakfast: breakfastValue || null,
+        lunch: lunchValue || null,
+        dinner: dinnerValue || null,
       }).unwrap();
       setShowCreateForm(false);
+      setFormError(null);
     } catch (error) {
       console.error('Failed to create meal menu:', error);
     }
@@ -220,6 +231,7 @@ export default function MealMenusScreen() {
           isLoading={isCreating}
           teacherClasses={teacherClasses}
           userRole={userRole}
+          formError={formError}
         />
       )}
 
@@ -322,11 +334,13 @@ function MealMenuCreateForm({
   isLoading,
   teacherClasses,
   userRole,
+  formError,
 }: {
   onSubmit: (data: { breakfast: string; lunch: string; dinner: string; classId?: number }) => void;
   isLoading: boolean;
   teacherClasses?: { class_id: number; class_name: string }[];
   userRole?: string;
+  formError?: string | null;
 }) {
   const theme = useTheme();
   const [breakfast, setBreakfast] = useState('');
@@ -347,6 +361,13 @@ function MealMenuCreateForm({
       <AppText variant="subheading" style={styles.formTitle}>
         Create New Meal Menu
       </AppText>
+      {formError ? (
+        <View style={styles.formError}>
+          <AppText variant="caption" color={BrandColors.coral}>
+            {formError}
+          </AppText>
+        </View>
+      ) : null}
 
       {/* Class Selection (for teachers who have assigned classes) */}
       {userRole === 'TEACHER' && teacherClasses && teacherClasses.length > 0 && (
@@ -473,6 +494,9 @@ const styles = StyleSheet.create({
   },
   formTitle: {
     marginBottom: 8,
+  },
+  formError: {
+    marginBottom: 4,
   },
   classButtons: {
     flexDirection: 'row',

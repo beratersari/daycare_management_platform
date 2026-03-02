@@ -22,6 +22,7 @@ import { teacherApi } from '@/store/api/teacherApi';
 import { parentApi } from '@/store/api/parentApi';
 import { mealMenuApi } from '@/store/api/mealMenuApi';
 import { schoolApi } from '@/store/api/schoolApi';
+import { termApi } from '@/store/api/termApi';
 import authReducer, { clearCredentials } from '@/store/authSlice';
 
 // Only persist the auth slice (tokens + user), not RTK Query cache
@@ -40,6 +41,7 @@ const rootReducer = combineReducers({
   [parentApi.reducerPath]: parentApi.reducer,
   [mealMenuApi.reducerPath]: mealMenuApi.reducer,
   [schoolApi.reducerPath]: schoolApi.reducer,
+  [termApi.reducerPath]: termApi.reducer,
 });
 
 // Root reducer with reset capability for logout
@@ -76,6 +78,7 @@ export const store = configureStore({
       parentApi.middleware,
       mealMenuApi.middleware,
       schoolApi.middleware,
+      termApi.middleware,
     ),
 });
 

@@ -12,6 +12,9 @@ setup_logging()
 logger = get_logger(__name__)
 
 
+DEFAULT_SERVER_PORT = 8081
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize the database on startup."""
@@ -44,15 +47,17 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         # Localhost variants
-        "http://localhost:8000",
+        "http://localhost:8003",
         "http://localhost:8002",   # Expo web dev server (default)
+        "http://localhost:8081",   # Expo web dev server (custom)
         "http://localhost:19000",  # Expo dev tools
         "http://localhost:19006",  # Expo web (legacy)
         "http://localhost:3000",   # React/Vite default
         "http://localhost:5173",   # Vite default
         # 127.0.0.1 variants
-        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8003",
         "http://127.0.0.1:8002",
+        "http://127.0.0.1:8081",
         "http://127.0.0.1:19000",
         "http://127.0.0.1:19006",
         "http://127.0.0.1:3000",
@@ -99,3 +104,14 @@ def health():
     """API v1 health check endpoint."""
     logger.trace("Health check: /api/v1/health")
     return {"status": "healthy", "version": "1.0.0"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=DEFAULT_SERVER_PORT,
+        reload=True,
+    )

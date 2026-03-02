@@ -23,6 +23,7 @@ def get_service(db: sqlite3.Connection = Depends(get_db)) -> TermService:
     return TermService(db)
 
 
+@router.post("", response_model=TermResponse, status_code=201)
 @router.post("/", response_model=TermResponse, status_code=201)
 def create_term(
     term: TermCreate,
@@ -42,6 +43,7 @@ def create_term(
     return result
 
 
+@router.get("", response_model=list[TermResponse])
 @router.get("/", response_model=list[TermResponse])
 def list_terms(
     current_user: dict = Depends(get_current_user),
@@ -138,6 +140,10 @@ def assign_class_to_term(
 ):
     """Assign a class to a term. ADMIN or DIRECTOR only."""
     logger.info("POST /api/v1/terms/%s/classes/%s — assign class to term request", term_id, class_id)
+    term = service.get_by_id(term_id)
+    if not term:
+        raise HTTPException(status_code=404, detail="Term not found")
+    check_school_ownership(current_user, term.school_id)
     success, error = service.assign_class_to_term(class_id, term_id)
     if not success:
         if "not found" in error.lower():
@@ -157,6 +163,10 @@ def unassign_class_from_term(
 ):
     """Unassign a class from a term. ADMIN or DIRECTOR only."""
     logger.info("DELETE /api/v1/terms/%s/classes/%s — unassign class from term request", term_id, class_id)
+    term = service.get_by_id(term_id)
+    if not term:
+        raise HTTPException(status_code=404, detail="Term not found")
+    check_school_ownership(current_user, term.school_id)
     success, error = service.unassign_class_from_term(class_id, term_id)
     if not success:
         if "not found" in error.lower():
@@ -175,6 +185,10 @@ def get_classes_by_term(
 ):
     """Get all classes assigned to a term. Any authenticated user."""
     logger.info("GET /api/v1/terms/%s/classes — get classes by term request", term_id)
+    term = service.get_by_id(term_id)
+    if not term:
+        raise HTTPException(status_code=404, detail="Term not found")
+    check_school_ownership(current_user, term.school_id)
     return service.get_classes_by_term(term_id)
 
 
@@ -186,4 +200,8 @@ def get_terms_by_class(
 ):
     """Get all terms assigned to a class. Any authenticated user."""
     logger.info("GET /api/v1/terms/class/%s/terms — get terms by class request", class_id)
+    class_data = service.class_repo.get_by_id(class_id)
+    if not class_data:
+        raise HTTPException(status_code=404, detail="Class not found")
+    check_school_ownership(current_user, class_data["school_id"])
     return service.get_terms_by_class(class_id)

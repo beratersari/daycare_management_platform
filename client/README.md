@@ -462,7 +462,7 @@ npm run lint     # Run ESLint
 The app connects to the backend API. Configure the base URL in `store/api/baseQuery.ts`:
 
 ```typescript
-const BASE_URL = 'http://localhost:8000/api/v1';
+const BASE_URL = 'http://localhost:8003/api/v1';
 ```
 
 ## Component Guidelines

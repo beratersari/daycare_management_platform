@@ -177,6 +177,12 @@ export function AdminDashboard(_props: AdminDashboardProps) {
             colorVariant="teal"
             onPress={() => router.push('/manage/parents')}
           />
+          <DashboardButton
+            label={t('dashboard.manageTerms')}
+            icon="calendar"
+            colorVariant="orange"
+            onPress={() => router.push('/manage/terms')}
+          />
         </View>
       </View>
 

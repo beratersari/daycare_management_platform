@@ -61,6 +61,15 @@ export function StudentDashboard(_props: StudentDashboardProps) {
             label={t('dashboard.mealMenus')}
             icon="restaurant"
             colorVariant="yellow"
+            onPress={() => router.push('/manage/meal-menus')}
+          />
+        </View>
+        <View style={styles.buttonRow}>
+          <DashboardButton
+            label={t('terms.title')}
+            icon="calendar"
+            colorVariant="teal"
+            onPress={() => router.push('/manage/terms')}
           />
         </View>
       </View>

@@ -1,8 +1,8 @@
 """DTO schemas for Term entity."""
-import re
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional
 from datetime import datetime
+import re
 
 from app.logger import get_logger
 
@@ -35,6 +35,19 @@ class TermCreate(BaseModel):
             logger.warning("Invalid date format: %s", v)
             raise ValueError("Invalid date format. Expected format: YYYY-MM-DD")
         return v
+
+    @model_validator(mode='after')
+    def validate_date_range(self):
+        """Validate start_date is before end_date."""
+        start_date = self.start_date
+        end_date = self.end_date
+        
+        if start_date and end_date:
+            start = datetime.strptime(start_date, "%Y-%m-%d")
+            end = datetime.strptime(end_date, "%Y-%m-%d")
+            if end < start:
+                raise ValueError("End date cannot be earlier than start date")
+        return self
 
     @field_validator("term_img_url")
     @classmethod
@@ -69,6 +82,19 @@ class TermUpdate(BaseModel):
             logger.warning("Invalid date format: %s", v)
             raise ValueError("Invalid date format. Expected format: YYYY-MM-DD")
         return v
+
+    @model_validator(mode='after')
+    def validate_date_range(self):
+        """Validate start_date is before end_date."""
+        start_date = self.start_date
+        end_date = self.end_date
+        
+        if start_date and end_date:
+            start = datetime.strptime(start_date, "%Y-%m-%d")
+            end = datetime.strptime(end_date, "%Y-%m-%d")
+            if end < start:
+                raise ValueError("End date cannot be earlier than start date")
+        return self
 
     @field_validator("term_img_url")
     @classmethod

@@ -95,6 +95,12 @@ export function TeacherDashboard(_props: TeacherDashboardProps) {
             colorVariant="coral"
             onPress={() => router.push('/manage/meal-menus')}
           />
+          <DashboardButton
+            label={t('terms.title')}
+            icon="calendar"
+            colorVariant="orange"
+            onPress={() => router.push('/manage/terms')}
+          />
         </View>
       </View>
 

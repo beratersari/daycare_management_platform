@@ -17,8 +17,8 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-The API will be available at `http://localhost:8000`.  
-Interactive docs at `http://localhost:8000/docs`.
+The API will be available at `http://localhost:8003`.  
+Interactive docs at `http://localhost:8003/docs`.
 
 ## Mock Users (Development)
 

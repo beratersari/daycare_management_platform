@@ -41,8 +41,21 @@ class TermService:
             term_img_url=data.term_img_url,
         )
 
+        # Enforce single active term per school
+        if data.activity_status:
+            self._deactivate_other_terms(data.school_id, term["term_id"])
+
         logger.info("Term created successfully with id=%s", term["term_id"])
         return TermResponse(**term), None
+
+    def _deactivate_other_terms(self, school_id: int, active_term_id: int) -> None:
+        """Deactivate all other terms for the school except the newly active one."""
+        logger.debug("Deactivating other terms for school_id=%s, active_term_id=%s", school_id, active_term_id)
+        other_terms = self.repo.get_by_school_id(school_id)
+        for t in other_terms:
+            if t["term_id"] != active_term_id and t["activity_status"]:
+                self.repo.update(t["term_id"], activity_status=False)
+                logger.trace("Deactivated term id=%s", t["term_id"])
 
     def get_all(self) -> list[TermResponse]:
         """Get all terms."""
@@ -96,6 +109,12 @@ class TermService:
         logger.debug("Term update data: %s", update_data)
 
         result = self.repo.update(term_id, **update_data)
+        
+        # Enforce single active term per school
+        if update_data.get("activity_status"):
+            school_id = existing["school_id"]
+            self._deactivate_other_terms(school_id, term_id)
+            
         logger.info("Term updated successfully: id=%s", term_id)
         return TermResponse(**result), None
 
@@ -129,15 +148,25 @@ class TermService:
         """Assign a class to a term."""
         logger.info("Assigning class id=%s to term id=%s", class_id, term_id)
 
-        # Validate term exists
-        if not self.repo.exists(term_id):
+        term = self.repo.get_by_id(term_id)
+        if not term:
             logger.warning("Term not found: id=%s", term_id)
             return False, "Term not found"
 
-        # Validate class exists
-        if not self.class_repo.exists(class_id):
+        class_data = self.class_repo.get_by_id(class_id)
+        if not class_data:
             logger.warning("Class not found: id=%s", class_id)
             return False, "Class not found"
+
+        if class_data["school_id"] != term["school_id"]:
+            logger.warning(
+                "Class school mismatch for term assignment: class_id=%s school_id=%s term_id=%s school_id=%s",
+                class_id,
+                class_data["school_id"],
+                term_id,
+                term["school_id"],
+            )
+            return False, "Class and term must belong to the same school"
 
         success = self.repo.assign_class_to_term(class_id, term_id)
         if success:
@@ -151,15 +180,25 @@ class TermService:
         """Unassign a class from a term."""
         logger.info("Unassigning class id=%s from term id=%s", class_id, term_id)
 
-        # Validate term exists
-        if not self.repo.exists(term_id):
+        term = self.repo.get_by_id(term_id)
+        if not term:
             logger.warning("Term not found: id=%s", term_id)
             return False, "Term not found"
 
-        # Validate class exists
-        if not self.class_repo.exists(class_id):
+        class_data = self.class_repo.get_by_id(class_id)
+        if not class_data:
             logger.warning("Class not found: id=%s", class_id)
             return False, "Class not found"
+
+        if class_data["school_id"] != term["school_id"]:
+            logger.warning(
+                "Class school mismatch for term unassignment: class_id=%s school_id=%s term_id=%s school_id=%s",
+                class_id,
+                class_data["school_id"],
+                term_id,
+                term["school_id"],
+            )
+            return False, "Class and term must belong to the same school"
 
         success = self.repo.unassign_class_from_term(class_id, term_id)
         if success:

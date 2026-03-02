@@ -14,7 +14,7 @@ export interface ClassResponse {
   class_id: number;
   school_id: number;
   class_name: string;
-  capacity: number | null;
+  capacity: number;
   created_date: string;
   students: StudentResponse[];
   teachers: UserResponse[];
@@ -23,13 +23,13 @@ export interface ClassResponse {
 export interface ClassCreateRequest {
   class_name: string;
   school_id: number;
-  capacity?: number | null;
+  capacity: number;
 }
 
 export interface ClassUpdateRequest {
   class_name?: string;
   school_id?: number;
-  capacity?: number | null;
+  capacity?: number;
 }
 
 export interface PaginatedResponse<T> {

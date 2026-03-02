@@ -21,6 +21,7 @@ import { classApi } from '@/store/api/classApi';
 import { teacherApi } from '@/store/api/teacherApi';
 import { parentApi } from '@/store/api/parentApi';
 import { mealMenuApi } from '@/store/api/mealMenuApi';
+import { termApi } from '@/store/api/termApi';
 import { persistor } from '@/store';
 import {
   clearCredentials,
@@ -73,6 +74,7 @@ export default function DashboardScreen() {
       dispatch(teacherApi.util.resetApiState());
       dispatch(parentApi.util.resetApiState());
       dispatch(mealMenuApi.util.resetApiState());
+      dispatch(termApi.util.resetApiState());
       
       // Clear credentials and reset Redux state
       dispatch(clearCredentials());

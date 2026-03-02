@@ -18,6 +18,7 @@ import { PageHeader } from '@/components/molecules/page-header';
 import { InfoCard } from '@/components/molecules/info-card';
 import { LoadingState } from '@/components/molecules/loading-state';
 import { EmptyState } from '@/components/molecules/empty-state';
+import { AlertBanner } from '@/components/molecules/alert-banner';
 import { ScreenTemplate } from '@/components/templates/screen-template';
 import { useLocalization } from '@/hooks/use-localization';
 import { useTheme } from '@/hooks/use-theme';
@@ -64,6 +65,7 @@ export default function ClassesManagementScreen() {
   const [editingClassId, setEditingClassId] = useState<number | null>(null);
   const [className, setClassName] = useState('');
   const [capacity, setCapacity] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     if (userRole === 'ADMIN' && schools && schools.length > 0 && !selectedSchoolId) {
@@ -96,7 +98,8 @@ export default function ClassesManagementScreen() {
   const handleEditClass = (cls: ClassResponse) => {
     setEditingClassId(cls.class_id);
     setClassName(cls.class_name);
-    setCapacity(cls.capacity ? cls.capacity.toString() : '');
+    setCapacity(cls.capacity.toString());
+    setFormError(null);
     setShowCreateForm(true);
   };
 
@@ -104,15 +107,36 @@ export default function ClassesManagementScreen() {
     setEditingClassId(null);
     setClassName('');
     setCapacity('');
+    setFormError(null);
     setShowCreateForm(false);
   };
 
   const handleSaveClass = async () => {
     if (!className.trim()) return;
+
+    if (!capacity.trim()) {
+      setFormError(t('class.capacityRequired'));
+      return;
+    }
+
+    const parsedCapacity = Number(capacity);
+    if (Number.isNaN(parsedCapacity)) {
+      setFormError(t('class.capacityInvalid'));
+      return;
+    }
+    if (parsedCapacity < 0) {
+      setFormError(t('class.capacityMin'));
+      return;
+    }
+    if (parsedCapacity > 30) {
+      setFormError(t('class.capacityMax'));
+      return;
+    }
+
     const payload = {
       class_name: className.trim(),
       school_id: selectedSchoolId || user?.school_id || 0,
-      capacity: capacity ? Number(capacity) : null,
+      capacity: parsedCapacity,
     };
 
     if (!payload.school_id) return;
@@ -219,6 +243,7 @@ export default function ClassesManagementScreen() {
           <AppText variant="subheading" style={styles.formTitle}>
             {editingClassId ? t('class.editClass') : t('class.createClass')}
           </AppText>
+          {formError ? <AlertBanner type="error" message={formError} /> : null}
           <FormField
             label={t('class.name')}
             value={className}

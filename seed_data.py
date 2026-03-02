@@ -155,10 +155,60 @@ def seed_database():
                 )
                 logger.info(f"Enrolled student {student_id} in class {cid}")
 
-    # 5. Create Meal Menus
+    # 5. Create Terms (active + inactive)
     today = datetime.now().strftime("%Y-%m-%d")
+    next_year = (datetime.now() + timedelta(days=365)).strftime("%Y-%m-%d")
+    last_year_start = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+    last_year_end = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    for school_id in school_rows:
+        term_entries = [
+            {
+                "term_name": "Spring Term",
+                "start_date": today,
+                "end_date": next_year,
+                "activity_status": 1,
+                "term_img_url": "https://images.example.com/terms/spring.png",
+            },
+            {
+                "term_name": "Winter Term",
+                "start_date": last_year_start,
+                "end_date": last_year_end,
+                "activity_status": 0,
+                "term_img_url": "https://images.example.com/terms/winter.png",
+            },
+        ]
+
+        for term in term_entries:
+            cursor.execute(
+                "SELECT term_id FROM terms WHERE term_name = ? AND school_id = ?",
+                (term["term_name"], school_id),
+            )
+            row = cursor.fetchone()
+            if row:
+                logger.info(f"Term '{term['term_name']}' already exists for school {school_id}.")
+                continue
+
+            cursor.execute(
+                """
+                INSERT INTO terms (school_id, term_name, start_date, end_date, activity_status, term_img_url, created_date, is_deleted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                """,
+                (
+                    school_id,
+                    term["term_name"],
+                    term["start_date"],
+                    term["end_date"],
+                    term["activity_status"],
+                    term["term_img_url"],
+                    now,
+                ),
+            )
+            logger.info(f"Created term: {term['term_name']} for school {school_id}")
+
+    # 6. Create Meal Menus
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-    
+
     for school_id in school_rows:
         class_ids = class_ids_by_school.get(school_id, [])
         menu_class_id = class_ids[0] if class_ids else None
