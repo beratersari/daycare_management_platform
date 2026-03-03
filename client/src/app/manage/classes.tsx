@@ -274,6 +274,7 @@ export default function ClassesManagementScreen() {
             key={cls.class_id}
             title={cls.class_name}
             subtitle={`${t('class.capacity')}: ${cls.capacity ?? t('class.capacityUnlimited')}`}
+            onPress={() => router.push(`/class/${cls.class_id}`)}
             rightElement={
               <View style={styles.cardActions}>
                 <Button

@@ -33,7 +33,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { InfoCardProps } from './InfoCard.types';
 import { styles } from './InfoCard.styles';
 
-export function InfoCard({ title, subtitle, children, rightElement, onPress }: InfoCardProps) {
+export function InfoCard({ title, subtitle, children, rightElement, onPress, noPadding }: InfoCardProps) {
   const theme = useTheme();
 
   const renderContent = () => (
@@ -51,7 +51,9 @@ export function InfoCard({ title, subtitle, children, rightElement, onPress }: I
         </View>
         {rightElement}
       </View>
-      {children}
+      <View style={noPadding ? styles.contentNoPadding : null}>
+        {children}
+      </View>
     </>
   );
 

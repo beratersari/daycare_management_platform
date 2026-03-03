@@ -153,25 +153,31 @@ class StudentRepository(BaseRepository):
 
     # --- Class enrollments ---
 
-    def enroll_in_class(self, student_id: int, class_id: int):
-        """Enroll a student in a class (idempotent)."""
-        logger.debug("Enrolling student id=%s in class id=%s", student_id, class_id)
+    def enroll_in_class(self, student_id: int, class_id: int, term_id: Optional[int] = None):
+        """Enroll a student in a class for a specific term (idempotent)."""
+        logger.debug("Enrolling student id=%s in class id=%s for term_id=%s", student_id, class_id, term_id)
         self.cursor.execute(
-            "INSERT OR IGNORE INTO student_classes (student_id, class_id) VALUES (?, ?)",
-            (student_id, class_id),
+            "INSERT OR IGNORE INTO student_classes (student_id, class_id, term_id) VALUES (?, ?, ?)",
+            (student_id, class_id, term_id),
         )
         self.commit()
-        logger.trace("Enrollment recorded: student_id=%s, class_id=%s", student_id, class_id)
+        logger.trace("Enrollment recorded: student_id=%s, class_id=%s, term_id=%s", student_id, class_id, term_id)
 
-    def unenroll_from_class(self, student_id: int, class_id: int):
-        """Remove a student from a specific class."""
-        logger.debug("Unenrolling student id=%s from class id=%s", student_id, class_id)
-        self.cursor.execute(
-            "DELETE FROM student_classes WHERE student_id = ? AND class_id = ?",
-            (student_id, class_id),
-        )
+    def unenroll_from_class(self, student_id: int, class_id: int, term_id: Optional[int] = None):
+        """Remove a student from a specific class (and optionally term)."""
+        logger.debug("Unenrolling student id=%s from class id=%s (term_id=%s)", student_id, class_id, term_id)
+        if term_id is not None:
+            self.cursor.execute(
+                "DELETE FROM student_classes WHERE student_id = ? AND class_id = ? AND term_id = ?",
+                (student_id, class_id, term_id),
+            )
+        else:
+            self.cursor.execute(
+                "DELETE FROM student_classes WHERE student_id = ? AND class_id = ?",
+                (student_id, class_id),
+            )
         self.commit()
-        logger.trace("Enrollment removed: student_id=%s, class_id=%s", student_id, class_id)
+        logger.trace("Enrollment removed: student_id=%s, class_id=%s, term_id=%s", student_id, class_id, term_id)
 
     def unenroll_from_all_classes(self, student_id: int):
         """Remove a student from all classes."""
@@ -183,29 +189,113 @@ class StudentRepository(BaseRepository):
         self.commit()
         logger.trace("All class enrollments removed for student id=%s", student_id)
 
-    def get_class_ids(self, student_id: int) -> list[int]:
-        """Get all class IDs a student is enrolled in (active classes only)."""
-        logger.trace("Fetching class IDs for student id=%s", student_id)
-        self.cursor.execute(
-            """SELECT sc.class_id FROM student_classes sc
-               JOIN classes c ON sc.class_id = c.class_id
-               WHERE sc.student_id = ? AND c.is_deleted = 0""",
-            (student_id,),
-        )
+    def get_class_ids(self, student_id: int, term_id: Optional[int] = None) -> list[int]:
+        """Get all class IDs a student is enrolled in (optionally for a specific term)."""
+        logger.trace("Fetching class IDs for student id=%s (term_id=%s)", student_id, term_id)
+        if term_id is not None:
+            self.cursor.execute(
+                """SELECT sc.class_id FROM student_classes sc
+                   JOIN classes c ON sc.class_id = c.class_id
+                   WHERE sc.student_id = ? AND sc.term_id = ? AND c.is_deleted = 0""",
+                (student_id, term_id),
+            )
+        else:
+            self.cursor.execute(
+                """SELECT sc.class_id FROM student_classes sc
+                   JOIN classes c ON sc.class_id = c.class_id
+                   WHERE sc.student_id = ? AND c.is_deleted = 0""",
+                (student_id,),
+            )
         class_ids = [row["class_id"] for row in self.cursor.fetchall()]
-        logger.trace("Class IDs for student id=%s: %s", student_id, class_ids)
+        logger.trace("Class IDs for student id=%s (term_id=%s): %s", student_id, term_id, class_ids)
         return class_ids
 
-    def is_enrolled_in_class(self, student_id: int, class_id: int) -> bool:
-        """Check whether a student is already enrolled in a given class."""
-        logger.trace("Checking enrollment: student_id=%s, class_id=%s", student_id, class_id)
-        self.cursor.execute(
-            "SELECT 1 FROM student_classes WHERE student_id = ? AND class_id = ?",
-            (student_id, class_id),
-        )
+    def is_enrolled_in_class(self, student_id: int, class_id: int, term_id: Optional[int] = None) -> bool:
+        """Check whether a student is already enrolled in a given class (and optionally term)."""
+        logger.trace("Checking enrollment: student_id=%s, class_id=%s, term_id=%s", student_id, class_id, term_id)
+        if term_id is not None:
+            self.cursor.execute(
+                "SELECT 1 FROM student_classes WHERE student_id = ? AND class_id = ? AND term_id = ?",
+                (student_id, class_id, term_id),
+            )
+        else:
+            self.cursor.execute(
+                "SELECT 1 FROM student_classes WHERE student_id = ? AND class_id = ?",
+                (student_id, class_id),
+            )
         result = self.cursor.fetchone() is not None
-        logger.trace("Enrollment check result: student_id=%s, class_id=%s → %s", student_id, class_id, result)
+        logger.trace("Enrollment check result: student_id=%s, class_id=%s, term_id=%s → %s", student_id, class_id, term_id, result)
         return result
+
+    def get_student_classes_for_term(self, student_id: int, term_id: int) -> list[dict]:
+        """Get all class enrollments for a student in a specific term."""
+        logger.trace("Fetching class enrollments for student id=%s in term_id=%s", student_id, term_id)
+        self.cursor.execute(
+            """SELECT sc.*, c.class_name, t.term_name FROM student_classes sc
+               JOIN classes c ON sc.class_id = c.class_id
+               JOIN terms t ON sc.term_id = t.term_id
+               WHERE sc.student_id = ? AND sc.term_id = ? AND c.is_deleted = 0 AND t.is_deleted = 0""",
+            (student_id, term_id),
+        )
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    def get_active_term_enrollments(self, student_id: int, term_id: int) -> list[dict]:
+        """Get all active class enrollments for a student in an active term."""
+        logger.trace("Fetching active term enrollments for student id=%s in term_id=%s", student_id, term_id)
+        self.cursor.execute(
+            """SELECT sc.*, c.class_name, c.school_id, t.term_name, t.activity_status 
+               FROM student_classes sc
+               JOIN classes c ON sc.class_id = c.class_id
+               JOIN terms t ON sc.term_id = t.term_id
+               WHERE sc.student_id = ? AND sc.term_id = ? 
+                 AND c.is_deleted = 0 AND t.is_deleted = 0 AND t.activity_status = 1""",
+            (student_id, term_id),
+        )
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    def count_students_in_class_for_term(self, class_id: int, term_id: Optional[int] = None) -> int:
+        """Count students enrolled in a class for a specific term (or all terms if term_id is None)."""
+        logger.trace("Counting students in class_id=%s for term_id=%s", class_id, term_id)
+        if term_id is not None:
+            self.cursor.execute(
+                """SELECT COUNT(DISTINCT sc.student_id) as count FROM student_classes sc
+                   JOIN students s ON sc.student_id = s.student_id
+                   WHERE sc.class_id = ? AND sc.term_id = ? AND s.is_deleted = 0""",
+                (class_id, term_id),
+            )
+        else:
+            self.cursor.execute(
+                """SELECT COUNT(DISTINCT sc.student_id) as count FROM student_classes sc
+                   JOIN students s ON sc.student_id = s.student_id
+                   WHERE sc.class_id = ? AND s.is_deleted = 0""",
+                (class_id,),
+            )
+        count = self.cursor.fetchone()["count"]
+        logger.trace("Student count for class_id=%s (term_id=%s): %d", class_id, term_id, count)
+        return count
+
+    def get_students_by_class_and_term(self, class_id: int, term_id: Optional[int] = None) -> list[dict]:
+        """Get all students enrolled in a class for a specific term."""
+        logger.trace("Fetching students for class_id=%s (term_id=%s)", class_id, term_id)
+        if term_id is not None:
+            self.cursor.execute(
+                """SELECT s.*, sc.term_id, t.term_name FROM students s
+                   JOIN student_classes sc ON s.student_id = sc.student_id
+                   LEFT JOIN terms t ON sc.term_id = t.term_id
+                   WHERE sc.class_id = ? AND sc.term_id = ? AND s.is_deleted = 0
+                   ORDER BY s.first_name, s.last_name""",
+                (class_id, term_id),
+            )
+        else:
+            self.cursor.execute(
+                """SELECT s.*, sc.term_id, t.term_name FROM students s
+                   JOIN student_classes sc ON s.student_id = sc.student_id
+                   LEFT JOIN terms t ON sc.term_id = t.term_id
+                   WHERE sc.class_id = ? AND s.is_deleted = 0
+                   ORDER BY s.first_name, s.last_name""",
+                (class_id,),
+            )
+        return [dict(row) for row in self.cursor.fetchall()]
 
     # --- Parent links ---
 

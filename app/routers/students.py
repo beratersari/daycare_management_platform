@@ -72,7 +72,7 @@ def create_student(
 @router.get("/", response_model=PaginatedResponse[StudentResponse])
 def list_students(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(10, ge=1, le=100, description="Number of items per page (1-100)"),
+    page_size: int = Query(10, ge=1, le=500, description="Number of items per page (1-500)"),
     search: str | None = Query(None, description="Search by student first or last name"),
     current_user: dict = Depends(require_admin_director_or_teacher),
     service: StudentService = Depends(get_service),

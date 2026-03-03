@@ -34,6 +34,7 @@ export function DashboardButton({
   colorVariant = 'coral',
   onPress,
   disabled = false,
+  style,
 }: DashboardButtonProps) {
   const backgroundColor = VARIANT_COLORS[colorVariant];
   const isButtonDisabled = disabled || !onPress;
@@ -45,6 +46,7 @@ export function DashboardButton({
         { backgroundColor },
         pressed && !disabled && styles.pressed,
         disabled && styles.disabled,
+        style,
       ]}
       onPress={onPress}
       disabled={isButtonDisabled}

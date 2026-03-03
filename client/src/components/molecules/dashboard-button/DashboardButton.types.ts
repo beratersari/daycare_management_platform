@@ -24,4 +24,6 @@ export interface DashboardButtonProps {
   onPress?: () => void;
   /** Whether the button is disabled. Defaults to false */
   disabled?: boolean;
+  /** Optional style override */
+  style?: any;
 }

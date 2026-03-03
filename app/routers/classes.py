@@ -19,6 +19,14 @@ from app.schemas.class_dto import (
     ClassEventUpdate,
     ClassEventResponse,
     ClassEventWithClassResponse,
+    StudentAssignmentRequest,
+    StudentAssignmentResponse,
+    TeacherAssignmentRequest,
+    TeacherAssignmentResponse,
+    ClassAssignmentsResponse,
+    BulkStudentAssignmentRequest,
+    BulkTeacherAssignmentRequest,
+    BulkAssignmentResponse,
 )
 from app.schemas.pagination import PaginatedResponse
 from app.schemas.student import StudentResponse
@@ -654,5 +662,203 @@ def delete_class_event(
 
 
 # --- User Events endpoint ---
+
+
+# --- Assignment endpoints ---
+
+
+@router.get("/{class_id}/assignments", response_model=ClassAssignmentsResponse)
+def get_class_assignments(
+    class_id: int,
+    term_id: Optional[int] = Query(None, description="Term ID to filter assignments. If not provided, uses the active term."),
+    current_user: dict = Depends(require_admin_director_or_teacher),
+    service: ClassService = Depends(get_service),
+):
+    """
+    Get all assignments (students and teachers) for a class.
+    ADMIN, DIRECTOR, or TEACHER (must be assigned to the class).
+    """
+    logger.info("GET /api/v1/classes/%s/assignments — get assignments (term_id=%s)", class_id, term_id)
+    
+    _check_teacher_class_access(current_user, class_id, service)
+    
+    result, error = service.get_class_assignments(class_id, term_id)
+    if error:
+        if "not found" in error.lower():
+            logger.warning("GET /api/v1/classes/%s/assignments — 404: %s", class_id, error)
+            raise HTTPException(status_code=404, detail=error)
+        logger.warning("GET /api/v1/classes/%s/assignments — 400: %s", class_id, error)
+        raise HTTPException(status_code=400, detail=error)
+    
+    logger.info("GET /api/v1/classes/%s/assignments — returning %d students, %d teachers",
+                class_id, len(result.students), len(result.teachers))
+    return result
+
+
+@router.post("/{class_id}/students", response_model=StudentAssignmentResponse, status_code=201)
+def assign_student_to_class(
+    class_id: int,
+    data: StudentAssignmentRequest,
+    current_user: dict = Depends(require_admin_or_director),
+    service: ClassService = Depends(get_service),
+):
+    """
+    Assign a student to a class for a specific term.
+    ADMIN or DIRECTOR only.
+    
+    Business rules:
+    - Student must exist and belong to the same school as the class
+    - Term must be active and belong to the same school
+    - Student cannot be assigned to multiple active classes in the same term
+    - Class capacity must not be exceeded
+    """
+    logger.info("POST /api/v1/classes/%s/students — assign student_id=%s", class_id, data.student_id)
+    
+    result, error = service.assign_student_to_class(class_id, data)
+    if error:
+        if "not found" in error.lower():
+            logger.warning("POST /api/v1/classes/%s/students — 404: %s", class_id, error)
+            raise HTTPException(status_code=404, detail=error)
+        if "already assigned" in error.lower() or "capacity" in error.lower():
+            logger.warning("POST /api/v1/classes/%s/students — 409: %s", class_id, error)
+            raise HTTPException(status_code=409, detail=error)
+        logger.warning("POST /api/v1/classes/%s/students — 400: %s", class_id, error)
+        raise HTTPException(status_code=400, detail=error)
+    
+    logger.info("POST /api/v1/classes/%s/students — student assigned successfully", class_id)
+    return result
+
+
+@router.post("/{class_id}/students/bulk", response_model=BulkAssignmentResponse)
+def bulk_assign_students_to_class(
+    class_id: int,
+    data: BulkStudentAssignmentRequest,
+    current_user: dict = Depends(require_admin_or_director),
+    service: ClassService = Depends(get_service),
+):
+    """
+    Bulk assign multiple students to a class for a specific term.
+    ADMIN or DIRECTOR only.
+    """
+    logger.info("POST /api/v1/classes/%s/students/bulk — bulk assign %d students", class_id, len(data.student_ids))
+    
+    result = service.bulk_assign_students(class_id, data)
+    logger.info(
+        "POST /api/v1/classes/%s/students/bulk — assigned: %d, already: %d, failed: %d",
+        class_id, len(result.assigned), len(result.already_assigned), len(result.failed)
+    )
+    return result
+
+
+@router.delete("/{class_id}/students/{student_id}", status_code=204)
+def unassign_student_from_class(
+    class_id: int,
+    student_id: int,
+    term_id: Optional[int] = Query(None, description="Term ID to unassign from. If not provided, removes from all terms."),
+    current_user: dict = Depends(require_admin_or_director),
+    service: ClassService = Depends(get_service),
+):
+    """
+    Remove a student from a class.
+    ADMIN or DIRECTOR only.
+    """
+    logger.info("DELETE /api/v1/classes/%s/students/%s — unassign student (term_id=%s)", class_id, student_id, term_id)
+    
+    success, error = service.unassign_student_from_class(class_id, student_id, term_id)
+    if not success:
+        if "not found" in error.lower():
+            logger.warning("DELETE /api/v1/classes/%s/students/%s — 404: %s", class_id, student_id, error)
+            raise HTTPException(status_code=404, detail=error)
+        if "not enrolled" in error.lower():
+            logger.warning("DELETE /api/v1/classes/%s/students/%s — 400: %s", class_id, student_id, error)
+            raise HTTPException(status_code=400, detail=error)
+        logger.warning("DELETE /api/v1/classes/%s/students/%s — 400: %s", class_id, student_id, error)
+        raise HTTPException(status_code=400, detail=error)
+    
+    logger.info("DELETE /api/v1/classes/%s/students/%s — student unassigned successfully", class_id, student_id)
+    return None
+
+
+@router.post("/{class_id}/teachers", response_model=TeacherAssignmentResponse, status_code=201)
+def assign_teacher_to_class(
+    class_id: int,
+    data: TeacherAssignmentRequest,
+    current_user: dict = Depends(require_admin_or_director),
+    service: ClassService = Depends(get_service),
+):
+    """
+    Assign a teacher to a class for a specific term.
+    ADMIN or DIRECTOR only.
+    
+    Business rules:
+    - Teacher (user) must exist and have role TEACHER
+    - Teacher must belong to the same school as the class
+    - Term must be active and belong to the same school
+    """
+    logger.info("POST /api/v1/classes/%s/teachers — assign teacher_id=%s", class_id, data.teacher_id)
+    
+    result, error = service.assign_teacher_to_class(class_id, data)
+    if error:
+        if "not found" in error.lower():
+            logger.warning("POST /api/v1/classes/%s/teachers — 404: %s", class_id, error)
+            raise HTTPException(status_code=404, detail=error)
+        if "not a teacher" in error.lower():
+            logger.warning("POST /api/v1/classes/%s/teachers — 400: %s", class_id, error)
+            raise HTTPException(status_code=400, detail=error)
+        logger.warning("POST /api/v1/classes/%s/teachers — 400: %s", class_id, error)
+        raise HTTPException(status_code=400, detail=error)
+    
+    logger.info("POST /api/v1/classes/%s/teachers — teacher assigned successfully", class_id)
+    return result
+
+
+@router.post("/{class_id}/teachers/bulk", response_model=BulkAssignmentResponse)
+def bulk_assign_teachers_to_class(
+    class_id: int,
+    data: BulkTeacherAssignmentRequest,
+    current_user: dict = Depends(require_admin_or_director),
+    service: ClassService = Depends(get_service),
+):
+    """
+    Bulk assign multiple teachers to a class for a specific term.
+    ADMIN or DIRECTOR only.
+    """
+    logger.info("POST /api/v1/classes/%s/teachers/bulk — bulk assign %d teachers", class_id, len(data.teacher_ids))
+    
+    result = service.bulk_assign_teachers(class_id, data)
+    logger.info(
+        "POST /api/v1/classes/%s/teachers/bulk — assigned: %d, already: %d, failed: %d",
+        class_id, len(result.assigned), len(result.already_assigned), len(result.failed)
+    )
+    return result
+
+
+@router.delete("/{class_id}/teachers/{teacher_id}", status_code=204)
+def unassign_teacher_from_class(
+    class_id: int,
+    teacher_id: int,
+    term_id: Optional[int] = Query(None, description="Term ID to unassign from. If not provided, removes from all terms."),
+    current_user: dict = Depends(require_admin_or_director),
+    service: ClassService = Depends(get_service),
+):
+    """
+    Remove a teacher from a class.
+    ADMIN or DIRECTOR only.
+    """
+    logger.info("DELETE /api/v1/classes/%s/teachers/%s — unassign teacher (term_id=%s)", class_id, teacher_id, term_id)
+    
+    success, error = service.unassign_teacher_from_class(class_id, teacher_id, term_id)
+    if not success:
+        if "not found" in error.lower():
+            logger.warning("DELETE /api/v1/classes/%s/teachers/%s — 404: %s", class_id, teacher_id, error)
+            raise HTTPException(status_code=404, detail=error)
+        if "not assigned" in error.lower():
+            logger.warning("DELETE /api/v1/classes/%s/teachers/%s — 400: %s", class_id, teacher_id, error)
+            raise HTTPException(status_code=400, detail=error)
+        logger.warning("DELETE /api/v1/classes/%s/teachers/%s — 400: %s", class_id, teacher_id, error)
+        raise HTTPException(status_code=400, detail=error)
+    
+    logger.info("DELETE /api/v1/classes/%s/teachers/%s — teacher unassigned successfully", class_id, teacher_id)
+    return None
 
 

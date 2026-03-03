@@ -78,9 +78,11 @@ def init_db():
         CREATE TABLE IF NOT EXISTS student_classes (
             student_id INTEGER NOT NULL,
             class_id INTEGER NOT NULL,
-            PRIMARY KEY (student_id, class_id),
+            term_id INTEGER,
+            PRIMARY KEY (student_id, class_id, term_id),
             FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
-            FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE
+            FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
+            FOREIGN KEY (term_id) REFERENCES terms(term_id) ON DELETE CASCADE
         );
 
         CREATE TABLE IF NOT EXISTS student_parents (
@@ -94,9 +96,11 @@ def init_db():
         CREATE TABLE IF NOT EXISTS teacher_classes (
             user_id INTEGER NOT NULL,
             class_id INTEGER NOT NULL,
-            PRIMARY KEY (user_id, class_id),
+            term_id INTEGER,
+            PRIMARY KEY (user_id, class_id, term_id),
             FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-            FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE
+            FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
+            FOREIGN KEY (term_id) REFERENCES terms(term_id) ON DELETE CASCADE
         );
 
         CREATE TABLE IF NOT EXISTS student_allergies (
@@ -365,6 +369,50 @@ def init_db():
             cursor.execute("ALTER TABLE class_events ADD COLUMN event_date TEXT")
             logger.info("event_date column added to class_events table successfully")
 
+    # Migration: add term_id to student_classes table for term-specific assignments
+    cursor.execute("PRAGMA table_info(student_classes)")
+    sc_columns = [row[1] for row in cursor.fetchall()]
+    if "term_id" not in sc_columns:
+        logger.info("Migrating student_classes to include term_id column")
+        cursor.executescript("""
+            ALTER TABLE student_classes RENAME TO student_classes_old;
+            CREATE TABLE student_classes (
+                student_id INTEGER NOT NULL,
+                class_id INTEGER NOT NULL,
+                term_id INTEGER,
+                PRIMARY KEY (student_id, class_id, term_id),
+                FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
+                FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
+                FOREIGN KEY (term_id) REFERENCES terms(term_id) ON DELETE CASCADE
+            );
+            INSERT OR IGNORE INTO student_classes (student_id, class_id, term_id)
+                SELECT student_id, class_id, NULL FROM student_classes_old;
+            DROP TABLE student_classes_old;
+        """)
+        logger.info("student_classes migration to include term_id completed")
+
+    # Migration: add term_id to teacher_classes table for term-specific assignments
+    cursor.execute("PRAGMA table_info(teacher_classes)")
+    tc_columns = [row[1] for row in cursor.fetchall()]
+    if "term_id" not in tc_columns:
+        logger.info("Migrating teacher_classes to include term_id column")
+        cursor.executescript("""
+            ALTER TABLE teacher_classes RENAME TO teacher_classes_old;
+            CREATE TABLE teacher_classes (
+                user_id INTEGER NOT NULL,
+                class_id INTEGER NOT NULL,
+                term_id INTEGER,
+                PRIMARY KEY (user_id, class_id, term_id),
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
+                FOREIGN KEY (term_id) REFERENCES terms(term_id) ON DELETE CASCADE
+            );
+            INSERT OR IGNORE INTO teacher_classes (user_id, class_id, term_id)
+                SELECT user_id, class_id, NULL FROM teacher_classes_old;
+            DROP TABLE teacher_classes_old;
+        """)
+        logger.info("teacher_classes migration to include term_id completed")
+
     conn.commit()
     conn.close()
     logger.info("Database schema initialised successfully")
@@ -398,7 +446,7 @@ def create_mock_data():
     school_id = cursor.lastrowid
     logger.info(f"Created mock school: Sunshine Daycare Center (ID: {school_id})")
 
-    # Mock users with different roles
+    # Mock users with different roles - Enhanced with more teachers and parents
     mock_users = [
         {
             "email": "admin@example.com",
@@ -418,8 +466,9 @@ def create_mock_data():
             "phone": "555-000-0002",
             "address": "42 Director Drive, Management Town"
         },
+        # Multiple Teachers
         {
-            "email": "teacher@example.com",
+            "email": "teacher1@example.com",
             "password": "teacher123",
             "first_name": "Emily",
             "last_name": "Davis",
@@ -428,13 +477,77 @@ def create_mock_data():
             "address": "101 Teacher Terrace, Classroom City"
         },
         {
-            "email": "parent@example.com",
+            "email": "teacher2@example.com",
+            "password": "teacher123",
+            "first_name": "James",
+            "last_name": "Wilson",
+            "role": "TEACHER",
+            "phone": "555-000-0006",
+            "address": "202 Education Ave, Teacherville"
+        },
+        {
+            "email": "teacher3@example.com",
+            "password": "teacher123",
+            "first_name": "Maria",
+            "last_name": "Garcia",
+            "role": "TEACHER",
+            "phone": "555-000-0007",
+            "address": "303 Learning Lane, Schooltown"
+        },
+        {
+            "email": "teacher4@example.com",
+            "password": "teacher123",
+            "first_name": "Robert",
+            "last_name": "Chen",
+            "role": "TEACHER",
+            "phone": "555-000-0008",
+            "address": "404 Knowledge Blvd, Educate City"
+        },
+        # Multiple Parents
+        {
+            "email": "parent1@example.com",
             "password": "parent123",
             "first_name": "Michael",
             "last_name": "Brown",
             "role": "PARENT",
             "phone": "555-000-0004",
             "address": "789 Family Lane, Parentville"
+        },
+        {
+            "email": "parent2@example.com",
+            "password": "parent123",
+            "first_name": "Jennifer",
+            "last_name": "Smith",
+            "role": "PARENT",
+            "phone": "555-000-0009",
+            "address": "567 Guardian Grove, Caretown"
+        },
+        {
+            "email": "parent3@example.com",
+            "password": "parent123",
+            "first_name": "David",
+            "last_name": "Lee",
+            "role": "PARENT",
+            "phone": "555-000-0010",
+            "address": "345 Care Circle, Familyville"
+        },
+        {
+            "email": "parent4@example.com",
+            "password": "parent123",
+            "first_name": "Amanda",
+            "last_name": "Taylor",
+            "role": "PARENT",
+            "phone": "555-000-0011",
+            "address": "123 Nurture Nest, Loveville"
+        },
+        {
+            "email": "parent5@example.com",
+            "password": "parent123",
+            "first_name": "Christopher",
+            "last_name": "Anderson",
+            "role": "PARENT",
+            "phone": "555-000-0012",
+            "address": "456 Support Street, Helptown"
         },
         {
             "email": "student@example.com",

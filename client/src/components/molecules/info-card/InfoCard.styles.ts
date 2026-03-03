@@ -20,4 +20,8 @@ export const styles = StyleSheet.create({
   title: {
     fontWeight: '600',
   },
+  contentNoPadding: {
+    marginHorizontal: -16,
+    marginBottom: -16,
+  },
 });

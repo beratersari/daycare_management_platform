@@ -140,3 +140,72 @@ class ClassEventWithClassResponse(BaseModel):
     created_by: int
     created_at: str
     updated_at: str
+
+
+# --- Assignment DTOs ---
+
+
+class StudentAssignmentRequest(BaseModel):
+    """Schema for assigning a student to a class."""
+    student_id: int = Field(..., description="ID of the student to assign")
+    term_id: Optional[int] = Field(None, description="ID of the term for the assignment. If not provided, uses the school's active term.")
+
+
+class StudentAssignmentResponse(BaseModel):
+    """Schema for student assignment response."""
+    student_id: int
+    class_id: int
+    term_id: Optional[int] = None
+    student_name: Optional[str] = None
+    class_name: Optional[str] = None
+    term_name: Optional[str] = None
+
+
+class TeacherAssignmentRequest(BaseModel):
+    """Schema for assigning a teacher to a class."""
+    teacher_id: int = Field(..., description="ID of the teacher (user) to assign")
+    term_id: Optional[int] = Field(None, description="ID of the term for the assignment. If not provided, uses the school's active term.")
+
+
+class TeacherAssignmentResponse(BaseModel):
+    """Schema for teacher assignment response."""
+    teacher_id: int
+    class_id: int
+    term_id: Optional[int] = None
+    teacher_name: Optional[str] = None
+    class_name: Optional[str] = None
+    term_name: Optional[str] = None
+
+
+class ClassAssignmentsResponse(BaseModel):
+    """Schema for viewing all assignments for a class."""
+    class_id: int
+    class_name: str
+    term_id: Optional[int] = None
+    term_name: Optional[str] = None
+    students: list[StudentAssignmentResponse] = []
+    teachers: list[TeacherAssignmentResponse] = []
+    capacity: Optional[int] = None
+    current_student_count: int = 0
+    available_spots: Optional[int] = None
+
+
+class BulkStudentAssignmentRequest(BaseModel):
+    """Schema for assigning multiple students to a class at once."""
+    student_ids: list[int] = Field(..., min_length=1, description="List of student IDs to assign")
+    term_id: Optional[int] = Field(None, description="ID of the term for the assignment. If not provided, uses the school's active term.")
+
+
+class BulkTeacherAssignmentRequest(BaseModel):
+    """Schema for assigning multiple teachers to a class at once."""
+    teacher_ids: list[int] = Field(..., min_length=1, description="List of teacher (user) IDs to assign")
+    term_id: Optional[int] = Field(None, description="ID of the term for the assignment. If not provided, uses the school's active term.")
+
+
+class BulkAssignmentResponse(BaseModel):
+    """Schema for bulk assignment response."""
+    class_id: int
+    term_id: Optional[int] = None
+    assigned: list[int] = Field(default=[], description="IDs that were successfully assigned")
+    already_assigned: list[int] = Field(default=[], description="IDs that were already assigned")
+    failed: list[dict] = Field(default=[], description="IDs that failed with reasons")

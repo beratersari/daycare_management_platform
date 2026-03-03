@@ -7,7 +7,13 @@ from app.repositories.class_repository import ClassRepository
 from app.repositories.student_repository import StudentRepository
 from app.repositories.school_repository import SchoolRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.class_dto import ClassCreate, ClassResponse, ClassUpdate, ClassEventCreate, ClassEventUpdate, ClassEventResponse
+from app.repositories.term_repository import TermRepository
+from app.schemas.class_dto import (
+    ClassCreate, ClassResponse, ClassUpdate, ClassEventCreate, ClassEventUpdate, ClassEventResponse,
+    StudentAssignmentRequest, StudentAssignmentResponse,
+    TeacherAssignmentRequest, TeacherAssignmentResponse,
+    ClassAssignmentsResponse, BulkStudentAssignmentRequest, BulkTeacherAssignmentRequest, BulkAssignmentResponse,
+)
 from app.schemas.auth import UserResponse
 from app.schemas.student import AllergyResponse, HWInfoResponse, StudentResponse
 
@@ -23,6 +29,7 @@ class ClassService:
         self.student_repo = StudentRepository(db)
         self.school_repo = SchoolRepository(db)
         self.user_repo = UserRepository(db)
+        self.term_repo = TermRepository(db)
         logger.trace("ClassService initialised")
 
     def create(self, data: ClassCreate) -> tuple[Optional[ClassResponse], Optional[str]]:
@@ -553,3 +560,390 @@ class ClassService:
         events = self.repo.get_events_for_user(user_id, role)
         logger.info("Retrieved %d events for user_id=%s with role=%s", len(events), user_id, role)
         return events
+
+    # --- Student Assignment Methods ---
+
+    def assign_student_to_class(
+        self,
+        class_id: int,
+        data: StudentAssignmentRequest,
+    ) -> tuple[Optional[StudentAssignmentResponse], Optional[str]]:
+        """
+        Assign a student to a class for a specific term.
+        
+        Business rules:
+        - Student must exist and belong to the same school as the class
+        - Term must be active and belong to the same school
+        - Student cannot be assigned to multiple active classes in the same term
+        - Class capacity must not be exceeded
+        """
+        logger.info("Assigning student_id=%s to class_id=%s (term_id=%s)", data.student_id, class_id, data.term_id)
+        
+        # Verify class exists
+        class_data = self.repo.get_by_id(class_id)
+        if not class_data:
+            logger.warning("Class not found: id=%s", class_id)
+            return None, "Class not found"
+        
+        # Verify student exists
+        student = self.student_repo.get_by_id(data.student_id)
+        if not student:
+            logger.warning("Student not found: id=%s", data.student_id)
+            return None, "Student not found"
+        
+        # Verify student belongs to same school as class
+        if student["school_id"] != class_data["school_id"]:
+            logger.warning(
+                "Student school_id=%s does not match class school_id=%s",
+                student["school_id"], class_data["school_id"]
+            )
+            return None, "Student must belong to the same school as the class"
+        
+        # Resolve term_id
+        term_id = data.term_id
+        if term_id is None:
+            # Use the school's active term
+            active_term = self.term_repo.get_active_term_by_school(class_data["school_id"])
+            if not active_term:
+                logger.warning("No active term found for school_id=%s", class_data["school_id"])
+                return None, "No active term found for the school. Please specify a term_id."
+            term_id = active_term["term_id"]
+            logger.debug("Using active term_id=%s for school_id=%s", term_id, class_data["school_id"])
+        
+        # Verify term exists and belongs to same school
+        term = self.term_repo.get_by_id(term_id)
+        if not term:
+            logger.warning("Term not found: id=%s", term_id)
+            return None, "Term not found"
+        if term["school_id"] != class_data["school_id"]:
+            logger.warning("Term school_id=%s does not match class school_id=%s", term["school_id"], class_data["school_id"])
+            return None, "Term must belong to the same school as the class"
+        
+        # Check if student is already assigned to this class for this term
+        if self.student_repo.is_enrolled_in_class(data.student_id, class_id, term_id):
+            logger.info("Student id=%s already assigned to class_id=%s for term_id=%s", data.student_id, class_id, term_id)
+            # Return success - idempotent operation
+            return StudentAssignmentResponse(
+                student_id=data.student_id,
+                class_id=class_id,
+                term_id=term_id,
+                student_name=f"{student['first_name']} {student['last_name']}",
+                class_name=class_data["class_name"],
+                term_name=term["term_name"],
+            ), None
+        
+        # Check if student is already assigned to another active class in the same term
+        existing_enrollments = self.student_repo.get_active_term_enrollments(data.student_id, term_id)
+        if existing_enrollments:
+            existing_class_names = [e["class_name"] for e in existing_enrollments]
+            logger.warning(
+                "Student id=%s already assigned to active class(es) %s in term_id=%s",
+                data.student_id, existing_class_names, term_id
+            )
+            return None, f"Student is already assigned to active class(es) in this term: {', '.join(existing_class_names)}"
+        
+        # Check class capacity
+        capacity_ok, capacity_error = self.repo.check_capacity_available(class_id)
+        if not capacity_ok:
+            logger.warning("Class capacity exceeded: %s", capacity_error)
+            return None, capacity_error
+        
+        # Perform assignment
+        self.student_repo.enroll_in_class(data.student_id, class_id, term_id)
+        logger.info("Student id=%s assigned to class_id=%s for term_id=%s", data.student_id, class_id, term_id)
+        
+        return StudentAssignmentResponse(
+            student_id=data.student_id,
+            class_id=class_id,
+            term_id=term_id,
+            student_name=f"{student['first_name']} {student['last_name']}",
+            class_name=class_data["class_name"],
+            term_name=term["term_name"],
+        ), None
+
+    def unassign_student_from_class(
+        self,
+        class_id: int,
+        student_id: int,
+        term_id: Optional[int] = None,
+    ) -> tuple[bool, Optional[str]]:
+        """Remove a student from a class."""
+        logger.info("Unassigning student_id=%s from class_id=%s (term_id=%s)", student_id, class_id, term_id)
+        
+        # Verify class exists
+        if not self.repo.exists(class_id):
+            logger.warning("Class not found: id=%s", class_id)
+            return False, "Class not found"
+        
+        # Verify student exists
+        if not self.student_repo.exists(student_id):
+            logger.warning("Student not found: id=%s", student_id)
+            return False, "Student not found"
+        
+        # Check if student is enrolled
+        if not self.student_repo.is_enrolled_in_class(student_id, class_id, term_id):
+            logger.warning("Student id=%s is not enrolled in class_id=%s (term_id=%s)", student_id, class_id, term_id)
+            return False, "Student is not enrolled in this class"
+        
+        # Remove enrollment
+        self.student_repo.unenroll_from_class(student_id, class_id, term_id)
+        logger.info("Student id=%s removed from class_id=%s (term_id=%s)", student_id, class_id, term_id)
+        
+        return True, None
+
+    def bulk_assign_students(
+        self,
+        class_id: int,
+        data: BulkStudentAssignmentRequest,
+    ) -> BulkAssignmentResponse:
+        """Assign multiple students to a class for a specific term."""
+        logger.info("Bulk assigning %d students to class_id=%s", len(data.student_ids), class_id)
+        
+        assigned = []
+        already_assigned = []
+        failed = []
+        
+        for student_id in data.student_ids:
+            result, error = self.assign_student_to_class(
+                class_id,
+                StudentAssignmentRequest(student_id=student_id, term_id=data.term_id)
+            )
+            if result:
+                if error is None:
+                    assigned.append(student_id)
+                else:
+                    # Already assigned case
+                    already_assigned.append(student_id)
+            else:
+                failed.append({"id": student_id, "reason": error})
+        
+        return BulkAssignmentResponse(
+            class_id=class_id,
+            term_id=data.term_id,
+            assigned=assigned,
+            already_assigned=already_assigned,
+            failed=failed,
+        )
+
+    # --- Teacher Assignment Methods ---
+
+    def assign_teacher_to_class(
+        self,
+        class_id: int,
+        data: TeacherAssignmentRequest,
+    ) -> tuple[Optional[TeacherAssignmentResponse], Optional[str]]:
+        """
+        Assign a teacher to a class for a specific term.
+        
+        Business rules:
+        - Teacher (user) must exist and have role TEACHER
+        - Teacher must belong to the same school as the class
+        - Term must be active and belong to the same school
+        """
+        logger.info("Assigning teacher_id=%s to class_id=%s (term_id=%s)", data.teacher_id, class_id, data.term_id)
+        
+        # Verify class exists
+        class_data = self.repo.get_by_id(class_id)
+        if not class_data:
+            logger.warning("Class not found: id=%s", class_id)
+            return None, "Class not found"
+        
+        # Verify teacher exists and has TEACHER role
+        teacher = self.user_repo.get_by_id(data.teacher_id)
+        if not teacher:
+            logger.warning("Teacher not found: id=%s", data.teacher_id)
+            return None, "Teacher not found"
+        if teacher["role"] != "TEACHER":
+            logger.warning("User id=%s is not a teacher (role=%s)", data.teacher_id, teacher["role"])
+            return None, "User is not a teacher"
+        
+        # Verify teacher belongs to same school as class
+        if teacher["school_id"] != class_data["school_id"]:
+            logger.warning(
+                "Teacher school_id=%s does not match class school_id=%s",
+                teacher["school_id"], class_data["school_id"]
+            )
+            return None, "Teacher must belong to the same school as the class"
+        
+        # Resolve term_id
+        term_id = data.term_id
+        if term_id is None:
+            active_term = self.term_repo.get_active_term_by_school(class_data["school_id"])
+            if not active_term:
+                logger.warning("No active term found for school_id=%s", class_data["school_id"])
+                return None, "No active term found for the school. Please specify a term_id."
+            term_id = active_term["term_id"]
+            logger.debug("Using active term_id=%s for school_id=%s", term_id, class_data["school_id"])
+        
+        # Verify term exists and belongs to same school
+        term = self.term_repo.get_by_id(term_id)
+        if not term:
+            logger.warning("Term not found: id=%s", term_id)
+            return None, "Term not found"
+        if term["school_id"] != class_data["school_id"]:
+            logger.warning("Term school_id=%s does not match class school_id=%s", term["school_id"], class_data["school_id"])
+            return None, "Term must belong to the same school as the class"
+        
+        # Check if teacher is already assigned to this class for this term
+        if self.user_repo.is_teacher_assigned_to_class(data.teacher_id, class_id, term_id):
+            logger.info("Teacher id=%s already assigned to class_id=%s for term_id=%s", data.teacher_id, class_id, term_id)
+            # Return success - idempotent operation
+            return TeacherAssignmentResponse(
+                teacher_id=data.teacher_id,
+                class_id=class_id,
+                term_id=term_id,
+                teacher_name=f"{teacher['first_name']} {teacher['last_name']}",
+                class_name=class_data["class_name"],
+                term_name=term["term_name"],
+            ), None
+        
+        # Perform assignment
+        self.user_repo.assign_teacher_to_class(data.teacher_id, class_id, term_id)
+        logger.info("Teacher id=%s assigned to class_id=%s for term_id=%s", data.teacher_id, class_id, term_id)
+        
+        return TeacherAssignmentResponse(
+            teacher_id=data.teacher_id,
+            class_id=class_id,
+            term_id=term_id,
+            teacher_name=f"{teacher['first_name']} {teacher['last_name']}",
+            class_name=class_data["class_name"],
+            term_name=term["term_name"],
+        ), None
+
+    def unassign_teacher_from_class(
+        self,
+        class_id: int,
+        teacher_id: int,
+        term_id: Optional[int] = None,
+    ) -> tuple[bool, Optional[str]]:
+        """Remove a teacher from a class."""
+        logger.info("Unassigning teacher_id=%s from class_id=%s (term_id=%s)", teacher_id, class_id, term_id)
+        
+        # Verify class exists
+        if not self.repo.exists(class_id):
+            logger.warning("Class not found: id=%s", class_id)
+            return False, "Class not found"
+        
+        # Verify teacher exists
+        teacher = self.user_repo.get_by_id(teacher_id)
+        if not teacher:
+            logger.warning("Teacher not found: id=%s", teacher_id)
+            return False, "Teacher not found"
+        
+        # Check if teacher is assigned
+        if not self.user_repo.is_teacher_assigned_to_class(teacher_id, class_id, term_id):
+            logger.warning("Teacher id=%s is not assigned to class_id=%s (term_id=%s)", teacher_id, class_id, term_id)
+            return False, "Teacher is not assigned to this class"
+        
+        # Remove assignment
+        self.user_repo.unassign_teacher_from_class(teacher_id, class_id, term_id)
+        logger.info("Teacher id=%s removed from class_id=%s (term_id=%s)", teacher_id, class_id, term_id)
+        
+        return True, None
+
+    def bulk_assign_teachers(
+        self,
+        class_id: int,
+        data: BulkTeacherAssignmentRequest,
+    ) -> BulkAssignmentResponse:
+        """Assign multiple teachers to a class for a specific term."""
+        logger.info("Bulk assigning %d teachers to class_id=%s", len(data.teacher_ids), class_id)
+        
+        assigned = []
+        already_assigned = []
+        failed = []
+        
+        for teacher_id in data.teacher_ids:
+            result, error = self.assign_teacher_to_class(
+                class_id,
+                TeacherAssignmentRequest(teacher_id=teacher_id, term_id=data.term_id)
+            )
+            if result:
+                if error is None:
+                    assigned.append(teacher_id)
+                else:
+                    already_assigned.append(teacher_id)
+            else:
+                failed.append({"id": teacher_id, "reason": error})
+        
+        return BulkAssignmentResponse(
+            class_id=class_id,
+            term_id=data.term_id,
+            assigned=assigned,
+            already_assigned=already_assigned,
+            failed=failed,
+        )
+
+    # --- Class Assignments View ---
+
+    def get_class_assignments(
+        self,
+        class_id: int,
+        term_id: Optional[int] = None,
+    ) -> tuple[Optional[ClassAssignmentsResponse], Optional[str]]:
+        """Get all assignments (students and teachers) for a class."""
+        logger.debug("Fetching assignments for class_id=%s (term_id=%s)", class_id, term_id)
+        
+        # Verify class exists
+        class_data = self.repo.get_by_id(class_id)
+        if not class_data:
+            logger.warning("Class not found: id=%s", class_id)
+            return None, "Class not found"
+        
+        # Resolve term_id if not provided
+        resolved_term_id = term_id
+        term_name = None
+        if resolved_term_id is None:
+            active_term = self.term_repo.get_active_term_by_school(class_data["school_id"])
+            if active_term:
+                resolved_term_id = active_term["term_id"]
+                term_name = active_term["term_name"]
+        else:
+            term = self.term_repo.get_by_id(resolved_term_id)
+            if term:
+                term_name = term["term_name"]
+        
+        # Get students
+        students_data = self.student_repo.get_students_by_class_and_term(class_id, resolved_term_id)
+        students = [
+            StudentAssignmentResponse(
+                student_id=s["student_id"],
+                class_id=class_id,
+                term_id=s.get("term_id"),
+                student_name=f"{s['first_name']} {s['last_name']}",
+                class_name=class_data["class_name"],
+                term_name=s.get("term_name"),
+            )
+            for s in students_data
+        ]
+        
+        # Get teachers
+        teachers_data = self.user_repo.get_teachers_by_class_id(class_id, resolved_term_id)
+        teachers = [
+            TeacherAssignmentResponse(
+                teacher_id=t["user_id"],
+                class_id=class_id,
+                term_id=t.get("term_id"),
+                teacher_name=f"{t['first_name']} {t['last_name']}",
+                class_name=class_data["class_name"],
+                term_name=t.get("term_name"),
+            )
+            for t in teachers_data
+        ]
+        
+        # Get capacity info
+        current_count = self.student_repo.count_students_in_class_for_term(class_id, resolved_term_id)
+        capacity = class_data.get("capacity")
+        available_spots = capacity - current_count if capacity is not None else None
+        
+        return ClassAssignmentsResponse(
+            class_id=class_id,
+            class_name=class_data["class_name"],
+            term_id=resolved_term_id,
+            term_name=term_name,
+            students=students,
+            teachers=teachers,
+            capacity=capacity,
+            current_student_count=current_count,
+            available_spots=available_spots,
+        ), None

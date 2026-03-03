@@ -80,13 +80,23 @@ def seed_database():
             cursor.execute("INSERT OR IGNORE INTO teacher_classes (user_id, class_id) VALUES (?, ?)", (teacher_id, cid))
             logger.info(f"Assigned teacher {teacher_id} to class {cid}")
 
-    # 4. Create Students
+    # 4. Create Students (15 students for richer data)
     students_data = [
-        {"first": "Alice", "last": "Brown", "dob": "2020-05-15", "photo": None},
-        {"first": "Bob", "last": "Brown", "dob": "2022-08-20", "photo": None},
-        {"first": "Charlie", "last": "Davis", "dob": "2021-03-10", "photo": None},
-        {"first": "Diana", "last": "Prince", "dob": "2019-11-25", "photo": None},
-        {"first": "Ethan", "last": "Hunt", "dob": "2020-01-12", "photo": None},
+        {"first": "Alice", "last": "Brown", "dob": "2020-05-15", "photo": None, "allergies": ["Peanuts"]},
+        {"first": "Bob", "last": "Brown", "dob": "2022-08-20", "photo": None, "allergies": []},
+        {"first": "Charlie", "last": "Davis", "dob": "2021-03-10", "photo": None, "allergies": ["Dairy", "Gluten"]},
+        {"first": "Diana", "last": "Prince", "dob": "2019-11-25", "photo": None, "allergies": []},
+        {"first": "Ethan", "last": "Hunt", "dob": "2020-01-12", "photo": None, "allergies": ["Shellfish"]},
+        {"first": "Fiona", "last": "Gallagher", "dob": "2021-07-08", "photo": None, "allergies": []},
+        {"first": "Gabriel", "last": "Martinez", "dob": "2020-09-14", "photo": None, "allergies": ["Tree Nuts"]},
+        {"first": "Hannah", "last": "Montgomery", "dob": "2019-04-22", "photo": None, "allergies": []},
+        {"first": "Isaac", "last": "Newton", "dob": "2022-02-28", "photo": None, "allergies": ["Eggs"]},
+        {"first": "Julia", "last": "Roberts", "dob": "2020-12-05", "photo": None, "allergies": []},
+        {"first": "Kevin", "last": "Hart", "dob": "2021-06-18", "photo": None, "allergies": ["Soy"]},
+        {"first": "Luna", "last": "Lovegood", "dob": "2019-08-30", "photo": None, "allergies": []},
+        {"first": "Marcus", "last": "Aurelius", "dob": "2020-11-11", "photo": None, "allergies": ["Pollen"]},
+        {"first": "Nina", "last": "Simone", "dob": "2022-01-25", "photo": None, "allergies": []},
+        {"first": "Oscar", "last": "Wilde", "dob": "2021-10-03", "photo": None, "allergies": ["Dust Mites"]},
     ]
     
     # Get more parents if available
@@ -117,13 +127,15 @@ def seed_database():
                 logger.info(f"Created student: {s['first']} {s['last']} for school {school_id}")
 
                 # Add Allergies
-                if i == 0:
+                for allergy in s.get("allergies", []):
+                    severity = "High" if allergy in ["Peanuts", "Shellfish", "Tree Nuts"] else "Medium"
+                    notes = "Carry EpiPen" if severity == "High" else f"Avoid {allergy.lower()}"
                     cursor.execute(
                         """
                         INSERT INTO student_allergies (student_id, allergy_name, severity, notes, created_date, is_deleted)
                         VALUES (?, ?, ?, ?, ?, 0)
                         """,
-                        (student_id, "Peanuts", "High", "Carry EpiPen", now),
+                        (student_id, allergy, severity, notes, now),
                     )
 
                 # Add HW Info

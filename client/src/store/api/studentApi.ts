@@ -54,6 +54,14 @@ export interface PaginatedResponse<T> {
 // API
 // ---------------------------------------------------------------------------
 
+export interface StudentCreateRequest {
+  first_name: string;
+  last_name: string;
+  school_id: number;
+  date_of_birth?: string;
+  student_photo?: string;
+}
+
 export const studentApi = createApi({
   reducerPath: 'studentApi',
   baseQuery: baseQueryWithReauth,
@@ -71,6 +79,16 @@ export const studentApi = createApi({
         params: { page, page_size: pageSize, search },
       }),
       providesTags: ['Students'],
+    }),
+
+    /** POST /students — create a new student */
+    createStudent: builder.mutation<StudentResponse, StudentCreateRequest>({
+      query: (data) => ({
+        url: '/students',
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: ['Students'],
     }),
 
     /** POST /students/{student_id}/classes/{class_id} — enroll a student in a class */
@@ -96,6 +114,7 @@ export const studentApi = createApi({
 export const {
   useGetStudentQuery,
   useListStudentsQuery,
+  useCreateStudentMutation,
   useEnrollStudentInClassMutation,
   useUnenrollStudentFromClassMutation,
 } = studentApi;

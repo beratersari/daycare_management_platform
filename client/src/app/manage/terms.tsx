@@ -455,7 +455,7 @@ export default function TermsManagementScreen() {
                 </View>
               ) : null
             }
-            onPress={() => setSelectedTermId(term.term_id === selectedTermId ? null : term.term_id)}
+            onPress={() => router.push(`/term/${term.term_id}`)}
           >
             <View style={styles.termMeta}>
               <AppText variant="caption" color={theme.textSecondary}>

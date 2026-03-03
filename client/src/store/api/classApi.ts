@@ -69,6 +69,65 @@ export interface ClassEventUpdateRequest {
   event_date?: string;
 }
 
+// Assignment Types
+export interface StudentAssignmentRequest {
+  student_id: number;
+  term_id?: number;
+}
+
+export interface StudentAssignmentResponse {
+  student_id: number;
+  class_id: number;
+  term_id: number | null;
+  student_name: string | null;
+  class_name: string | null;
+  term_name: string | null;
+}
+
+export interface TeacherAssignmentRequest {
+  teacher_id: number;
+  term_id?: number;
+}
+
+export interface TeacherAssignmentResponse {
+  teacher_id: number;
+  class_id: number;
+  term_id: number | null;
+  teacher_name: string | null;
+  class_name: string | null;
+  term_name: string | null;
+}
+
+export interface ClassAssignmentsResponse {
+  class_id: number;
+  class_name: string;
+  term_id: number | null;
+  term_name: string | null;
+  students: StudentAssignmentResponse[];
+  teachers: TeacherAssignmentResponse[];
+  capacity: number | null;
+  current_student_count: number;
+  available_spots: number | null;
+}
+
+export interface BulkStudentAssignmentRequest {
+  student_ids: number[];
+  term_id?: number;
+}
+
+export interface BulkTeacherAssignmentRequest {
+  teacher_ids: number[];
+  term_id?: number;
+}
+
+export interface BulkAssignmentResponse {
+  class_id: number;
+  term_id: number | null;
+  assigned: number[];
+  already_assigned: number[];
+  failed: { id: number; reason: string }[];
+}
+
 // ---------------------------------------------------------------------------
 // API
 // ---------------------------------------------------------------------------
@@ -157,6 +216,77 @@ export const classApi = createApi({
         method: 'DELETE',
       }),
     }),
+
+    // --- Assignment Endpoints ---
+
+    /** GET /classes/{class_id}/assignments — get all assignments for a class */
+    getClassAssignments: builder.query<ClassAssignmentsResponse, { classId: number; termId?: number }>({
+      query: ({ classId, termId }) => ({
+        url: `/classes/${classId}/assignments`,
+        params: termId ? { term_id: termId } : undefined,
+      }),
+      providesTags: ['Classes'],
+    }),
+
+    /** POST /classes/{class_id}/students — assign a student to a class */
+    assignStudentToClass: builder.mutation<StudentAssignmentResponse, { classId: number; data: StudentAssignmentRequest }>({
+      query: ({ classId, data }) => ({
+        url: `/classes/${classId}/students`,
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: ['Classes'],
+    }),
+
+    /** POST /classes/{class_id}/students/bulk — bulk assign students to a class */
+    bulkAssignStudentsToClass: builder.mutation<BulkAssignmentResponse, { classId: number; data: BulkStudentAssignmentRequest }>({
+      query: ({ classId, data }) => ({
+        url: `/classes/${classId}/students/bulk`,
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: ['Classes'],
+    }),
+
+    /** DELETE /classes/{class_id}/students/{student_id} — unassign a student from a class */
+    unassignStudentFromClass: builder.mutation<void, { classId: number; studentId: number; termId?: number }>({
+      query: ({ classId, studentId, termId }) => ({
+        url: `/classes/${classId}/students/${studentId}`,
+        method: 'DELETE',
+        params: termId ? { term_id: termId } : undefined,
+      }),
+      invalidatesTags: ['Classes'],
+    }),
+
+    /** POST /classes/{class_id}/teachers — assign a teacher to a class */
+    assignTeacherToClass: builder.mutation<TeacherAssignmentResponse, { classId: number; data: TeacherAssignmentRequest }>({
+      query: ({ classId, data }) => ({
+        url: `/classes/${classId}/teachers`,
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: ['Classes'],
+    }),
+
+    /** POST /classes/{class_id}/teachers/bulk — bulk assign teachers to a class */
+    bulkAssignTeachersToClass: builder.mutation<BulkAssignmentResponse, { classId: number; data: BulkTeacherAssignmentRequest }>({
+      query: ({ classId, data }) => ({
+        url: `/classes/${classId}/teachers/bulk`,
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: ['Classes'],
+    }),
+
+    /** DELETE /classes/{class_id}/teachers/{teacher_id} — unassign a teacher from a class */
+    unassignTeacherFromClass: builder.mutation<void, { classId: number; teacherId: number; termId?: number }>({
+      query: ({ classId, teacherId, termId }) => ({
+        url: `/classes/${classId}/teachers/${teacherId}`,
+        method: 'DELETE',
+        params: termId ? { term_id: termId } : undefined,
+      }),
+      invalidatesTags: ['Classes'],
+    }),
   }),
 });
 
@@ -171,4 +301,12 @@ export const {
   useCreateClassEventMutation,
   useUpdateClassEventMutation,
   useDeleteClassEventMutation,
+  // Assignment hooks
+  useGetClassAssignmentsQuery,
+  useAssignStudentToClassMutation,
+  useBulkAssignStudentsToClassMutation,
+  useUnassignStudentFromClassMutation,
+  useAssignTeacherToClassMutation,
+  useBulkAssignTeachersToClassMutation,
+  useUnassignTeacherFromClassMutation,
 } = classApi;

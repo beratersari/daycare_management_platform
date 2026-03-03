@@ -14,4 +14,6 @@ export interface InfoCardProps {
   rightElement?: React.ReactNode;
   /** Optional callback - if provided, the card becomes pressable */
   onPress?: () => void;
+  /** Optional flag to remove default padding from content area */
+  noPadding?: boolean;
 }

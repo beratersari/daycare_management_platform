@@ -151,72 +151,142 @@ class UserRepository(BaseRepository):
 
     # --- Teacher class assignments ---
 
-    def assign_teacher_to_class(self, user_id: int, class_id: int) -> None:
-        """Assign a teacher (user_id) to a class (idempotent)."""
-        logger.debug("Assigning teacher user_id=%s to class_id=%s", user_id, class_id)
+    def assign_teacher_to_class(self, user_id: int, class_id: int, term_id: Optional[int] = None) -> None:
+        """Assign a teacher (user_id) to a class for a specific term (idempotent)."""
+        logger.debug("Assigning teacher user_id=%s to class_id=%s (term_id=%s)", user_id, class_id, term_id)
         self.cursor.execute(
-            "INSERT OR IGNORE INTO teacher_classes (user_id, class_id) VALUES (?, ?)",
-            (user_id, class_id),
+            "INSERT OR IGNORE INTO teacher_classes (user_id, class_id, term_id) VALUES (?, ?, ?)",
+            (user_id, class_id, term_id),
         )
         self.commit()
-        logger.trace("Teacher assignment recorded: user_id=%s, class_id=%s", user_id, class_id)
+        logger.trace("Teacher assignment recorded: user_id=%s, class_id=%s, term_id=%s", user_id, class_id, term_id)
 
-    def unassign_teacher_from_class(self, user_id: int, class_id: int) -> None:
-        """Unassign a teacher (user_id) from a class."""
-        logger.debug("Unassigning teacher user_id=%s from class_id=%s", user_id, class_id)
-        self.cursor.execute(
-            "DELETE FROM teacher_classes WHERE user_id = ? AND class_id = ?",
-            (user_id, class_id),
-        )
+    def unassign_teacher_from_class(self, user_id: int, class_id: int, term_id: Optional[int] = None) -> None:
+        """Unassign a teacher (user_id) from a class (and optionally term)."""
+        logger.debug("Unassigning teacher user_id=%s from class_id=%s (term_id=%s)", user_id, class_id, term_id)
+        if term_id is not None:
+            self.cursor.execute(
+                "DELETE FROM teacher_classes WHERE user_id = ? AND class_id = ? AND term_id = ?",
+                (user_id, class_id, term_id),
+            )
+        else:
+            self.cursor.execute(
+                "DELETE FROM teacher_classes WHERE user_id = ? AND class_id = ?",
+                (user_id, class_id),
+            )
         self.commit()
-        logger.trace("Teacher assignment removed: user_id=%s, class_id=%s", user_id, class_id)
+        logger.trace("Teacher assignment removed: user_id=%s, class_id=%s, term_id=%s", user_id, class_id, term_id)
 
-    def get_teacher_class_ids(self, user_id: int) -> list[int]:
-        """Get class IDs assigned to a teacher (user_id)."""
-        logger.trace("Fetching class IDs for teacher user_id=%s", user_id)
-        self.cursor.execute(
-            """SELECT tc.class_id FROM teacher_classes tc
-               JOIN classes c ON tc.class_id = c.class_id
-               WHERE tc.user_id = ? AND c.is_deleted = 0""",
-            (user_id,),
-        )
+    def get_teacher_class_ids(self, user_id: int, term_id: Optional[int] = None) -> list[int]:
+        """Get class IDs assigned to a teacher (user_id), optionally for a specific term."""
+        logger.trace("Fetching class IDs for teacher user_id=%s (term_id=%s)", user_id, term_id)
+        if term_id is not None:
+            self.cursor.execute(
+                """SELECT tc.class_id FROM teacher_classes tc
+                   JOIN classes c ON tc.class_id = c.class_id
+                   WHERE tc.user_id = ? AND tc.term_id = ? AND c.is_deleted = 0""",
+                (user_id, term_id),
+            )
+        else:
+            self.cursor.execute(
+                """SELECT tc.class_id FROM teacher_classes tc
+                   JOIN classes c ON tc.class_id = c.class_id
+                   WHERE tc.user_id = ? AND c.is_deleted = 0""",
+                (user_id,),
+            )
         class_ids = [row["class_id"] for row in self.cursor.fetchall()]
-        logger.trace("Class IDs for teacher user_id=%s: %s", user_id, class_ids)
+        logger.trace("Class IDs for teacher user_id=%s (term_id=%s): %s", user_id, term_id, class_ids)
         return class_ids
 
-    def replace_teacher_classes(self, user_id: int, class_ids: list[int]) -> list[int]:
+    def is_teacher_assigned_to_class(self, user_id: int, class_id: int, term_id: Optional[int] = None) -> bool:
+        """Check whether a teacher is assigned to a given class (and optionally term)."""
+        logger.trace("Checking teacher assignment: user_id=%s, class_id=%s, term_id=%s", user_id, class_id, term_id)
+        if term_id is not None:
+            self.cursor.execute(
+                "SELECT 1 FROM teacher_classes WHERE user_id = ? AND class_id = ? AND term_id = ?",
+                (user_id, class_id, term_id),
+            )
+        else:
+            self.cursor.execute(
+                "SELECT 1 FROM teacher_classes WHERE user_id = ? AND class_id = ?",
+                (user_id, class_id),
+            )
+        result = self.cursor.fetchone() is not None
+        logger.trace("Teacher assignment check result: user_id=%s, class_id=%s, term_id=%s → %s", user_id, class_id, term_id, result)
+        return result
+
+    def replace_teacher_classes(self, user_id: int, class_ids: list[int], term_id: Optional[int] = None) -> list[int]:
         """
         Replace all class assignments for a teacher with the given list.
         
         Removes existing assignments and inserts the new ones.
         Returns the final list of class_ids assigned.
         """
-        logger.debug("Replacing class assignments for teacher user_id=%s with class_ids=%s", user_id, class_ids)
-        # Remove all existing assignments
-        self.cursor.execute(
-            "DELETE FROM teacher_classes WHERE user_id = ?",
-            (user_id,),
-        )
+        logger.debug("Replacing class assignments for teacher user_id=%s with class_ids=%s (term_id=%s)", user_id, class_ids, term_id)
+        # Remove all existing assignments (for the specific term if provided)
+        if term_id is not None:
+            self.cursor.execute(
+                "DELETE FROM teacher_classes WHERE user_id = ? AND term_id = ?",
+                (user_id, term_id),
+            )
+        else:
+            self.cursor.execute(
+                "DELETE FROM teacher_classes WHERE user_id = ?",
+                (user_id,),
+            )
         # Insert new assignments
         for class_id in class_ids:
             self.cursor.execute(
-                "INSERT OR IGNORE INTO teacher_classes (user_id, class_id) VALUES (?, ?)",
-                (user_id, class_id),
+                "INSERT OR IGNORE INTO teacher_classes (user_id, class_id, term_id) VALUES (?, ?, ?)",
+                (user_id, class_id, term_id),
             )
         self.commit()
-        logger.info("Teacher user_id=%s now assigned to %d class(es): %s", user_id, len(class_ids), class_ids)
+        logger.info("Teacher user_id=%s now assigned to %d class(es): %s (term_id=%s)", user_id, len(class_ids), class_ids, term_id)
         return class_ids
 
-    def get_teachers_by_class_id(self, class_id: int) -> list[dict]:
-        """Get teacher users assigned to a class."""
-        logger.trace("Fetching teacher users for class_id=%s", class_id)
-        self.cursor.execute(
-            """SELECT u.* FROM users u
-               JOIN teacher_classes tc ON u.user_id = tc.user_id
-               WHERE tc.class_id = ? AND u.is_deleted = 0""",
-            (class_id,),
-        )
+    def get_teachers_by_class_id(self, class_id: int, term_id: Optional[int] = None) -> list[dict]:
+        """Get teacher users assigned to a class, optionally for a specific term."""
+        logger.trace("Fetching teacher users for class_id=%s (term_id=%s)", class_id, term_id)
+        if term_id is not None:
+            self.cursor.execute(
+                """SELECT u.*, tc.term_id, t.term_name FROM users u
+                   JOIN teacher_classes tc ON u.user_id = tc.user_id
+                   LEFT JOIN terms t ON tc.term_id = t.term_id
+                   WHERE tc.class_id = ? AND tc.term_id = ? AND u.is_deleted = 0 AND u.role = 'TEACHER'
+                   ORDER BY u.first_name, u.last_name""",
+                (class_id, term_id),
+            )
+        else:
+            self.cursor.execute(
+                """SELECT u.*, tc.term_id, t.term_name FROM users u
+                   JOIN teacher_classes tc ON u.user_id = tc.user_id
+                   LEFT JOIN terms t ON tc.term_id = t.term_id
+                   WHERE tc.class_id = ? AND u.is_deleted = 0 AND u.role = 'TEACHER'
+                   ORDER BY u.first_name, u.last_name""",
+                (class_id,),
+            )
         return [dict(row) for row in self.cursor.fetchall()]
+
+    def count_teachers_in_class_for_term(self, class_id: int, term_id: Optional[int] = None) -> int:
+        """Count teachers assigned to a class for a specific term."""
+        logger.trace("Counting teachers in class_id=%s (term_id=%s)", class_id, term_id)
+        if term_id is not None:
+            self.cursor.execute(
+                """SELECT COUNT(DISTINCT tc.user_id) as count FROM teacher_classes tc
+                   JOIN users u ON tc.user_id = u.user_id
+                   WHERE tc.class_id = ? AND tc.term_id = ? AND u.is_deleted = 0 AND u.role = 'TEACHER'""",
+                (class_id, term_id),
+            )
+        else:
+            self.cursor.execute(
+                """SELECT COUNT(DISTINCT tc.user_id) as count FROM teacher_classes tc
+                   JOIN users u ON tc.user_id = u.user_id
+                   WHERE tc.class_id = ? AND u.is_deleted = 0 AND u.role = 'TEACHER'""",
+                (class_id,),
+            )
+        count = self.cursor.fetchone()["count"]
+        logger.trace("Teacher count for class_id=%s (term_id=%s): %d", class_id, term_id, count)
+        return count
 
     # --- Parent/student links ---
 
